@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../features/daily_records/domain/expense.dart';
+import '../../features/daily_records/domain/income.dart';
+import '../../features/daily_records/domain/refuel.dart';
+import '../../features/daily_records/presentation/expense_form_screen.dart';
+import '../../features/daily_records/presentation/history_screen.dart';
+import '../../features/daily_records/presentation/income_form_screen.dart';
+import '../../features/daily_records/presentation/refuel_form_screen.dart';
 import '../../features/odometer/presentation/update_odometer_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/vehicles/domain/vehicle.dart';
@@ -49,6 +56,31 @@ class AppNavigation {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const UpdateOdometerScreen()),
     );
+  }
+
+  static Future<void> openRefuel(BuildContext context, {Refuel? refuel}) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => RefuelFormScreen(refuel: refuel)),
+    );
+  }
+
+  static Future<void> openExpense(BuildContext context, {Expense? expense}) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ExpenseFormScreen(expense: expense),
+      ),
+    );
+  }
+
+  static Future<void> openIncome(BuildContext context, {Income? income}) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => IncomeFormScreen(income: income)),
+    );
+  }
+
+  static Future<void> openHistory(BuildContext context) {
+    return Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const HistoryScreen()));
   }
 
   static Future<void> openSettings(BuildContext context) {

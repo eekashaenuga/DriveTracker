@@ -157,6 +157,36 @@ class _ActionSheet extends StatelessWidget {
           ),
           const SizedBox(height: DTSpacing.md),
           ListTile(
+            key: const Key('actionRefuelTile'),
+            leading: const Icon(Icons.local_gas_station_rounded),
+            title: const Text('Refuel'),
+            subtitle: const Text('Fuel cost, volume and odometer'),
+            onTap: () {
+              Navigator.of(context).pop();
+              AppNavigation.openRefuel(parentContext);
+            },
+          ),
+          ListTile(
+            key: const Key('actionExpenseTile'),
+            leading: const Icon(Icons.payments_outlined),
+            title: const Text('Expense'),
+            subtitle: const Text('Parking, tax, repairs and more'),
+            onTap: () {
+              Navigator.of(context).pop();
+              AppNavigation.openExpense(parentContext);
+            },
+          ),
+          ListTile(
+            key: const Key('actionIncomeTile'),
+            leading: const Icon(Icons.work_outline_rounded),
+            title: const Text('Income'),
+            subtitle: const Text('Vehicle-related income'),
+            onTap: () {
+              Navigator.of(context).pop();
+              AppNavigation.openIncome(parentContext);
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.speed_rounded),
             title: const Text('Odometer'),
             subtitle: const Text('Record a manual reading'),
@@ -166,20 +196,8 @@ class _ActionSheet extends StatelessWidget {
             },
           ),
           const _ComingLaterTile(
-            icon: Icons.local_gas_station_rounded,
-            title: 'Refuel',
-          ),
-          const _ComingLaterTile(
             icon: Icons.build_circle_outlined,
             title: 'Service',
-          ),
-          const _ComingLaterTile(
-            icon: Icons.payments_outlined,
-            title: 'Expense',
-          ),
-          const _ComingLaterTile(
-            icon: Icons.work_outline_rounded,
-            title: 'Income',
           ),
         ],
       ),

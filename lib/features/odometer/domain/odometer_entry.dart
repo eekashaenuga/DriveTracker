@@ -3,6 +3,7 @@ enum OdometerSourceType {
   refuel('Refuel', 'REFUEL'),
   service('Service', 'SERVICE'),
   expense('Expense', 'EXPENSE'),
+  income('Income', 'INCOME'),
   other('Other', 'OTHER');
 
   const OdometerSourceType(this.label, this.storageValue);

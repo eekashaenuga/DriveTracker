@@ -39,14 +39,19 @@ class MoreScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => AppNavigation.openSettings(context),
             ),
+            ListTile(
+              leading: const Icon(Icons.history_rounded),
+              title: const Text('History'),
+              subtitle: const Text(
+                'Fuel, expense, income and odometer records',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => AppNavigation.openHistory(context),
+            ),
             const DTSectionHeader(title: 'Planned'),
             const _ComingLaterTile(
               icon: Icons.description_outlined,
               title: 'Documents',
-            ),
-            const _ComingLaterTile(
-              icon: Icons.history_rounded,
-              title: 'History',
             ),
             const _ComingLaterTile(
               icon: Icons.calculate_outlined,
@@ -65,7 +70,7 @@ class MoreScreen extends StatelessWidget {
               leading: Icon(Icons.lock_outline_rounded),
               title: Text('Local-first by design'),
               subtitle: Text(
-                'Vehicle data stays on this device in Milestone 1.',
+                'Vehicle and daily record data stays on this device.',
               ),
             ),
           ],
