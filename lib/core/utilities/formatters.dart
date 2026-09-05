@@ -1,4 +1,5 @@
 import '../../features/vehicles/domain/vehicle.dart';
+import 'money.dart';
 
 class DTFormatters {
   const DTFormatters._();
@@ -33,6 +34,22 @@ class DTFormatters {
   static String date(DateTime value) {
     final local = value.toLocal();
     return '${local.year}-${_two(local.month)}-${_two(local.day)}';
+  }
+
+  static String moneyMinor(int? value) {
+    return MoneyAmount.formatMinor(value);
+  }
+
+  static String fuelVolume(int? millilitres) {
+    return FuelNumbers.formatLitres(millilitres);
+  }
+
+  static String fuelPrice(int? microsPerLitre) {
+    return FuelNumbers.formatPencePerLitre(microsPerLitre);
+  }
+
+  static String ukMpg(double? value) {
+    return FuelNumbers.formatUkMpg(value);
   }
 
   static String _two(int value) => value.toString().padLeft(2, '0');

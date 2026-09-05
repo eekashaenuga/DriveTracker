@@ -2,6 +2,22 @@ import 'package:flutter/material.dart';
 
 import '../core/database/app_database.dart';
 import '../core/utilities/validation_exception.dart';
+import '../features/daily_records/data/activity_repository.dart';
+import '../features/daily_records/data/category_repository.dart';
+import '../features/daily_records/data/expense_repository.dart';
+import '../features/daily_records/data/financial_summary_repository.dart';
+import '../features/daily_records/data/income_repository.dart';
+import '../features/daily_records/data/refuel_repository.dart';
+import '../features/daily_records/domain/category_service.dart';
+import '../features/daily_records/domain/daily_activity.dart';
+import '../features/daily_records/domain/expense.dart';
+import '../features/daily_records/domain/expense_service.dart';
+import '../features/daily_records/domain/fuel_economy_calculator.dart';
+import '../features/daily_records/domain/income.dart';
+import '../features/daily_records/domain/income_service.dart';
+import '../features/daily_records/domain/record_category.dart';
+import '../features/daily_records/domain/refuel.dart';
+import '../features/daily_records/domain/refuel_service.dart';
 import '../features/home/data/home_repository.dart';
 import '../features/home/domain/vehicle_dashboard.dart';
 import '../features/odometer/data/odometer_repository.dart';
@@ -19,10 +35,22 @@ class DriveTrackerController extends ChangeNotifier {
     : _database = database,
       _vehicleRepository = VehicleRepository(database),
       _odometerRepository = OdometerRepository(database),
-      _settingsRepository = SettingsRepository(database) {
+      _settingsRepository = SettingsRepository(database),
+      _categoryRepository = CategoryRepository(database),
+      _refuelRepository = RefuelRepository(database),
+      _expenseRepository = ExpenseRepository(database),
+      _incomeRepository = IncomeRepository(database),
+      _activityRepository = ActivityRepository(database) {
+    final financialSummaryRepository = FinancialSummaryRepository(
+      refuelRepository: _refuelRepository,
+      expenseRepository: _expenseRepository,
+    );
     _homeRepository = HomeRepository(
       vehicleRepository: _vehicleRepository,
       odometerRepository: _odometerRepository,
+      refuelRepository: _refuelRepository,
+      financialSummaryRepository: financialSummaryRepository,
+      activityRepository: _activityRepository,
     );
     _vehicleService = VehicleService(
       database: _database,
@@ -34,6 +62,27 @@ class DriveTrackerController extends ChangeNotifier {
       vehicleRepository: _vehicleRepository,
       odometerRepository: _odometerRepository,
     );
+    _categoryService = CategoryService(categoryRepository: _categoryRepository);
+    _refuelService = RefuelService(
+      database: _database,
+      vehicleRepository: _vehicleRepository,
+      odometerRepository: _odometerRepository,
+      refuelRepository: _refuelRepository,
+    );
+    _expenseService = ExpenseService(
+      database: _database,
+      vehicleRepository: _vehicleRepository,
+      categoryRepository: _categoryRepository,
+      odometerRepository: _odometerRepository,
+      expenseRepository: _expenseRepository,
+    );
+    _incomeService = IncomeService(
+      database: _database,
+      vehicleRepository: _vehicleRepository,
+      categoryRepository: _categoryRepository,
+      odometerRepository: _odometerRepository,
+      incomeRepository: _incomeRepository,
+    );
   }
 
   static const _themeSystem = 'system';
@@ -44,9 +93,18 @@ class DriveTrackerController extends ChangeNotifier {
   final VehicleRepository _vehicleRepository;
   final OdometerRepository _odometerRepository;
   final SettingsRepository _settingsRepository;
+  final CategoryRepository _categoryRepository;
+  final RefuelRepository _refuelRepository;
+  final ExpenseRepository _expenseRepository;
+  final IncomeRepository _incomeRepository;
+  final ActivityRepository _activityRepository;
   late final HomeRepository _homeRepository;
   late final VehicleService _vehicleService;
   late final OdometerService _odometerService;
+  late final CategoryService _categoryService;
+  late final RefuelService _refuelService;
+  late final ExpenseService _expenseService;
+  late final IncomeService _incomeService;
 
   bool _initialized = false;
   bool _busy = false;
@@ -71,6 +129,19 @@ class DriveTrackerController extends ChangeNotifier {
     return List.unmodifiable(_dashboard?.recentOdometerEntries ?? const []);
   }
 
+  int get monthSpendMinor => _dashboard?.monthSpendMinor ?? 0;
+  int? get latestFuelPriceMicrosPerLitre {
+    return _dashboard?.latestFuelPriceMicrosPerLitre;
+  }
+
+  FuelEconomyInterval? get latestFuelEconomyInterval {
+    return _dashboard?.latestFuelEconomyInterval;
+  }
+
+  List<DailyActivity> get recentActivity {
+    return List.unmodifiable(_dashboard?.recentActivity ?? const []);
+  }
+
   Future<int?> currentOdometerForVehicle(String vehicleId) {
     return _odometerRepository.currentOdometerForVehicle(vehicleId);
   }
@@ -78,6 +149,28 @@ class DriveTrackerController extends ChangeNotifier {
   Future<List<OdometerEntry>> odometerEntriesForVehicle(String vehicleId) {
     return _odometerRepository.recentForVehicle(vehicleId, limit: 20);
   }
+
+  Future<List<RecordCategory>> categoriesFor(RecordCategoryType type) {
+    return _categoryRepository.listByType(type);
+  }
+
+  Future<List<DailyActivity>> historyForSelectedVehicle({
+    DailyActivityType type = DailyActivityType.all,
+  }) {
+    final vehicle = selectedVehicle;
+    if (vehicle == null) {
+      return Future.value(const []);
+    }
+    return _activityRepository.listForVehicle(
+      vehicle.id,
+      type: type,
+      limit: 100,
+    );
+  }
+
+  Future<Refuel?> refuelById(String id) => _refuelRepository.getById(id);
+  Future<Expense?> expenseById(String id) => _expenseRepository.getById(id);
+  Future<Income?> incomeById(String id) => _incomeRepository.getById(id);
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -166,6 +259,141 @@ class DriveTrackerController extends ChangeNotifier {
       );
       await _reloadData(preferredVehicleId: vehicle.id);
       return entry;
+    });
+  }
+
+  Future<RecordCategory> addCustomCategory({
+    required RecordCategoryType type,
+    required String name,
+  }) async {
+    return _runMutation(() {
+      return _categoryService.createCustomCategory(type: type, name: name);
+    });
+  }
+
+  Future<Refuel> addRefuel(
+    RefuelDraft draft, {
+    bool allowHistorical = false,
+    bool confirmLargeIncrease = false,
+  }) async {
+    return _runMutation(() async {
+      final refuel = await _refuelService.createRefuel(
+        draft,
+        allowHistorical: allowHistorical,
+        confirmLargeIncrease: confirmLargeIncrease,
+      );
+      await _reloadData(preferredVehicleId: refuel.vehicleId);
+      return refuel;
+    });
+  }
+
+  Future<Refuel> updateRefuel(
+    String refuelId,
+    RefuelDraft draft, {
+    bool allowHistorical = false,
+    bool confirmLargeIncrease = false,
+  }) async {
+    return _runMutation(() async {
+      final refuel = await _refuelService.updateRefuel(
+        refuelId,
+        draft,
+        allowHistorical: allowHistorical,
+        confirmLargeIncrease: confirmLargeIncrease,
+      );
+      await _reloadData(preferredVehicleId: refuel.vehicleId);
+      return refuel;
+    });
+  }
+
+  Future<void> deleteRefuel(String refuelId) async {
+    return _runMutation(() async {
+      final currentVehicleId = selectedVehicle?.id;
+      await _refuelService.deleteRefuel(refuelId);
+      await _reloadData(preferredVehicleId: currentVehicleId);
+    });
+  }
+
+  Future<Expense> addExpense(
+    ExpenseDraft draft, {
+    bool allowHistorical = false,
+    bool confirmLargeIncrease = false,
+  }) async {
+    return _runMutation(() async {
+      final expense = await _expenseService.createExpense(
+        draft,
+        allowHistorical: allowHistorical,
+        confirmLargeIncrease: confirmLargeIncrease,
+      );
+      await _reloadData(preferredVehicleId: expense.vehicleId);
+      return expense;
+    });
+  }
+
+  Future<Expense> updateExpense(
+    String expenseId,
+    ExpenseDraft draft, {
+    bool allowHistorical = false,
+    bool confirmLargeIncrease = false,
+  }) async {
+    return _runMutation(() async {
+      final expense = await _expenseService.updateExpense(
+        expenseId,
+        draft,
+        allowHistorical: allowHistorical,
+        confirmLargeIncrease: confirmLargeIncrease,
+      );
+      await _reloadData(preferredVehicleId: expense.vehicleId);
+      return expense;
+    });
+  }
+
+  Future<void> deleteExpense(String expenseId) async {
+    return _runMutation(() async {
+      final currentVehicleId = selectedVehicle?.id;
+      await _expenseService.deleteExpense(expenseId);
+      await _reloadData(preferredVehicleId: currentVehicleId);
+    });
+  }
+
+  Future<Income> addIncome(
+    IncomeDraft draft, {
+    bool allowHistorical = false,
+    bool confirmLargeIncrease = false,
+  }) async {
+    return _runMutation(() async {
+      final income = await _incomeService.createIncome(
+        draft,
+        allowHistorical: allowHistorical,
+        confirmLargeIncrease: confirmLargeIncrease,
+      );
+      await _reloadData(preferredVehicleId: income.vehicleId);
+      return income;
+    });
+  }
+
+  Future<Income> updateIncome(
+    String incomeId,
+    IncomeDraft draft, {
+    bool allowHistorical = false,
+    bool confirmLargeIncrease = false,
+  }) async {
+    return _runMutation(() async {
+      final income = await _incomeService.updateIncome(
+        incomeId,
+        draft,
+        allowHistorical: allowHistorical,
+        confirmLargeIncrease: confirmLargeIncrease,
+      );
+      await _reloadData(preferredVehicleId: income.vehicleId);
+      return income;
+    });
+  }
+
+  Future<void> deleteIncome(String incomeId) async {
+    return _runMutation(() async {
+      final currentVehicleId = selectedVehicle?.id;
+      await _incomeService.deleteIncome(incomeId);
+      await _reloadData(preferredVehicleId: currentVehicleId);
     });
   }
 

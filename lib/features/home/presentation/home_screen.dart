@@ -10,6 +10,8 @@ import '../../../shared/widgets/dt_empty_state.dart';
 import '../../../shared/widgets/dt_metric_card.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
 import '../../../shared/widgets/dt_section_header.dart';
+import '../../daily_records/domain/daily_activity.dart';
+import '../../vehicles/domain/vehicle.dart';
 import '../../vehicles/presentation/vehicle_selector_sheet.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -38,7 +40,8 @@ class HomeScreen extends StatelessWidget {
     }
 
     final unit = vehicle.distanceUnit;
-    final recentEntries = controller.recentOdometerEntries;
+    final recentActivity = controller.recentActivity;
+    final latestEconomy = controller.latestFuelEconomyInterval;
 
     return Scaffold(
       body: SafeArea(
@@ -79,10 +82,36 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(width: DTSpacing.md),
                 Expanded(
                   child: DTMetricCard(
-                    icon: Icons.history_rounded,
-                    label: 'Readings',
-                    value: recentEntries.length.toString(),
-                    supportingText: 'Recent saved entries',
+                    icon: Icons.payments_rounded,
+                    label: 'This month',
+                    value: DTFormatters.moneyMinor(controller.monthSpendMinor),
+                    supportingText: 'Fuel and expenses',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: DTSpacing.lg),
+            Row(
+              children: [
+                Expanded(
+                  child: DTMetricCard(
+                    icon: Icons.local_gas_station_rounded,
+                    label: 'Fuel price',
+                    value: DTFormatters.fuelPrice(
+                      controller.latestFuelPriceMicrosPerLitre,
+                    ),
+                    supportingText: 'Latest saved refuel',
+                  ),
+                ),
+                const SizedBox(width: DTSpacing.md),
+                Expanded(
+                  child: DTMetricCard(
+                    icon: Icons.speed_rounded,
+                    label: 'Fuel economy',
+                    value: DTFormatters.ukMpg(latestEconomy?.ukMpg),
+                    supportingText: latestEconomy == null
+                        ? 'Not enough fuel data yet'
+                        : 'Latest full-to-full interval',
                   ),
                 ),
               ],
@@ -95,30 +124,56 @@ class HomeScreen extends StatelessWidget {
               onPressed: () => AppNavigation.openUpdateOdometer(context),
             ),
             const DTSectionHeader(title: 'Recent activity'),
-            if (recentEntries.isEmpty)
+            if (recentActivity.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: DTSpacing.lg),
-                child: Text('No odometer readings have been saved yet.'),
+                child: Text('No records have been saved yet.'),
               )
             else
-              for (final entry in recentEntries)
+              for (final activity in recentActivity)
                 DTActivityRow(
-                  icon: Icons.speed_rounded,
-                  title: '${entry.sourceType.label} odometer reading',
-                  subtitle: DTFormatters.dateTime(entry.eventDateTime),
-                  trailing: Text(
-                    DTFormatters.odometer(entry.odometer, unit),
-                    style: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
+                  icon: _iconForActivity(activity.type),
+                  title: activity.title,
+                  subtitle: _activitySubtitle(activity, unit),
+                  trailing: _activityTrailing(context, activity),
                 ),
-            const DTSectionHeader(title: 'Coming later'),
-            _FutureMetricsNotice(vehicleName: vehicle.name),
           ],
         ),
       ),
     );
   }
+}
+
+IconData _iconForActivity(DailyActivityType type) {
+  return switch (type) {
+    DailyActivityType.refuel => Icons.local_gas_station_rounded,
+    DailyActivityType.expense => Icons.payments_outlined,
+    DailyActivityType.income => Icons.work_outline_rounded,
+    DailyActivityType.odometer => Icons.speed_rounded,
+    DailyActivityType.all => Icons.history_rounded,
+  };
+}
+
+String _activitySubtitle(DailyActivity activity, DistanceUnit unit) {
+  final parts = [
+    DTFormatters.dateTime(activity.eventDateTime),
+    activity.subtitle,
+    if (activity.odometer != null)
+      DTFormatters.odometer(activity.odometer, unit),
+  ];
+  return parts.where((part) => part.trim().isNotEmpty).join(' / ');
+}
+
+Widget? _activityTrailing(BuildContext context, DailyActivity activity) {
+  final amount = activity.amountMinor;
+  if (amount == null) {
+    return null;
+  }
+  return Text(
+    DTFormatters.moneyMinor(amount),
+    style: Theme.of(context).textTheme.labelLarge
+        ?.copyWith(fontWeight: FontWeight.w800),
+  );
 }
 
 class _VehicleSelectorButton extends StatelessWidget {
@@ -182,42 +237,6 @@ class _VehicleSelectorButton extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _FutureMetricsNotice extends StatelessWidget {
-  const _FutureMetricsNotice({required this.vehicleName});
-
-  final String vehicleName;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(DTSpacing.lg),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.32,
-        ),
-        borderRadius: DTRadii.cardRadius,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.auto_graph_rounded, color: theme.colorScheme.secondary),
-          const SizedBox(width: DTSpacing.md),
-          Expanded(
-            child: Text(
-              'Fuel, service, expense and reminder metrics for $vehicleName will appear after those records are added in later milestones.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

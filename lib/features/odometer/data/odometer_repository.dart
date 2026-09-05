@@ -16,6 +16,50 @@ class OdometerRepository {
     await db.insert('odometer_entries', entry.toMap());
   }
 
+  Future<void> update(
+    OdometerEntry entry, {
+    sqflite.DatabaseExecutor? executor,
+  }) async {
+    final db = await _executor(executor);
+    await db.update(
+      'odometer_entries',
+      entry.toMap(),
+      where: 'id = ?',
+      whereArgs: [entry.id],
+    );
+  }
+
+  Future<OdometerEntry?> getBySource(
+    OdometerSourceType sourceType,
+    String sourceRecordId, {
+    sqflite.DatabaseExecutor? executor,
+  }) async {
+    final db = await _executor(executor);
+    final rows = await db.query(
+      'odometer_entries',
+      where: 'source_type = ? AND source_record_id = ?',
+      whereArgs: [sourceType.storageValue, sourceRecordId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    return OdometerEntry.fromMap(rows.first);
+  }
+
+  Future<void> deleteBySource(
+    OdometerSourceType sourceType,
+    String sourceRecordId, {
+    sqflite.DatabaseExecutor? executor,
+  }) async {
+    final db = await _executor(executor);
+    await db.delete(
+      'odometer_entries',
+      where: 'source_type = ? AND source_record_id = ?',
+      whereArgs: [sourceType.storageValue, sourceRecordId],
+    );
+  }
+
   Future<int?> currentOdometerForVehicle(
     String vehicleId, {
     sqflite.DatabaseExecutor? executor,
