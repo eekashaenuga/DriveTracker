@@ -3,6 +3,7 @@ enum DailyActivityType {
   refuel('Fuel'),
   expense('Expense'),
   income('Income'),
+  service('Service'),
   odometer('Odometer');
 
   const DailyActivityType(this.label);

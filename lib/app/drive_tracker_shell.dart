@@ -187,6 +187,16 @@ class _ActionSheet extends StatelessWidget {
             },
           ),
           ListTile(
+            key: const Key('actionServiceTile'),
+            leading: const Icon(Icons.build_circle_outlined),
+            title: const Text('Service'),
+            subtitle: const Text('Garage visits and maintenance items'),
+            onTap: () {
+              Navigator.of(context).pop();
+              AppNavigation.openService(parentContext);
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.speed_rounded),
             title: const Text('Odometer'),
             subtitle: const Text('Record a manual reading'),
@@ -195,29 +205,8 @@ class _ActionSheet extends StatelessWidget {
               AppNavigation.openUpdateOdometer(parentContext);
             },
           ),
-          const _ComingLaterTile(
-            icon: Icons.build_circle_outlined,
-            title: 'Service',
-          ),
         ],
       ),
-    );
-  }
-}
-
-class _ComingLaterTile extends StatelessWidget {
-  const _ComingLaterTile({required this.icon, required this.title});
-
-  final IconData icon;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      enabled: false,
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: const Text('Planned for a later milestone'),
     );
   }
 }

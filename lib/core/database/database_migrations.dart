@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 class DatabaseMigrations {
   const DatabaseMigrations._();
 
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
 
   static Future<void> createSchema(
     sqflite.DatabaseExecutor db,
@@ -17,6 +17,9 @@ class DatabaseMigrations {
     if (version >= 2) {
       await _createV2(db);
     }
+    if (version >= 3) {
+      await _createV3(db);
+    }
   }
 
   static Future<void> migrate(
@@ -28,6 +31,9 @@ class DatabaseMigrations {
       switch (version) {
         case 2:
           await _createV2(db);
+          break;
+        case 3:
+          await _createV3(db);
           break;
         default:
           throw StateError(
@@ -263,5 +269,90 @@ class DatabaseMigrations {
         'updated_at': timestamp,
       }, conflictAlgorithm: sqflite.ConflictAlgorithm.ignore);
     }
+  }
+
+  static Future<void> _createV3(sqflite.DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE maintenance_items (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT,
+        mileage_interval INTEGER CHECK (mileage_interval IS NULL OR mileage_interval > 0),
+        time_interval_days INTEGER CHECK (time_interval_days IS NULL OR time_interval_days > 0),
+        mileage_warning INTEGER NOT NULL DEFAULT 1000 CHECK (mileage_warning >= 0),
+        date_warning_days INTEGER NOT NULL DEFAULT 30 CHECK (date_warning_days >= 0),
+        reminder_enabled INTEGER NOT NULL DEFAULT 1 CHECK (reminder_enabled IN (0, 1)),
+        is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON UPDATE CASCADE
+          ON DELETE RESTRICT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE services (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        event_datetime TEXT NOT NULL,
+        odometer INTEGER CHECK (odometer IS NULL OR odometer >= 0),
+        total_cost_minor INTEGER NOT NULL DEFAULT 0 CHECK (total_cost_minor >= 0),
+        garage TEXT,
+        notes TEXT,
+        is_baseline INTEGER NOT NULL DEFAULT 0 CHECK (is_baseline IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON UPDATE CASCADE
+          ON DELETE RESTRICT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE service_items (
+        id TEXT PRIMARY KEY,
+        service_id TEXT NOT NULL,
+        maintenance_item_id TEXT,
+        item_name TEXT NOT NULL,
+        allocated_cost_minor INTEGER CHECK (allocated_cost_minor IS NULL OR allocated_cost_minor >= 0),
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (service_id) REFERENCES services (id)
+          ON UPDATE CASCADE
+          ON DELETE CASCADE,
+        FOREIGN KEY (maintenance_item_id) REFERENCES maintenance_items (id)
+          ON UPDATE CASCADE
+          ON DELETE SET NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_maintenance_items_vehicle_active
+      ON maintenance_items (vehicle_id, is_archived, name COLLATE NOCASE)
+    ''');
+    await db.execute('''
+      CREATE UNIQUE INDEX idx_maintenance_items_active_name
+      ON maintenance_items (vehicle_id, name COLLATE NOCASE)
+      WHERE is_archived = 0
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_services_vehicle_event
+      ON services (vehicle_id, event_datetime DESC)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_services_vehicle_odometer
+      ON services (vehicle_id, odometer)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_service_items_service
+      ON service_items (service_id)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_service_items_maintenance_item
+      ON service_items (maintenance_item_id)
+    ''');
   }
 }

@@ -89,6 +89,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     value: DailyActivityType.income,
                     label: Text('Income'),
                   ),
+                  ButtonSegment(
+                    value: DailyActivityType.service,
+                    label: Text('Service'),
+                  ),
                 ],
                 onSelectionChanged: (selection) {
                   setState(() {
@@ -146,6 +150,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
         final income = await controller.incomeById(activity.recordId);
         if (income != null && mounted) {
           await AppNavigation.openIncome(context, income: income);
+        }
+        break;
+      case DailyActivityType.service:
+        final service = await controller.serviceRecordById(activity.recordId);
+        if (service != null && mounted) {
+          await AppNavigation.openService(context, service: service);
         }
         break;
       case DailyActivityType.odometer:
@@ -256,6 +266,7 @@ class _ActivityList extends StatelessWidget {
       DailyActivityType.refuel => Icons.local_gas_station_rounded,
       DailyActivityType.expense => Icons.payments_outlined,
       DailyActivityType.income => Icons.work_outline_rounded,
+      DailyActivityType.service => Icons.build_circle_outlined,
       DailyActivityType.odometer => Icons.speed_rounded,
       DailyActivityType.all => Icons.history_rounded,
     };

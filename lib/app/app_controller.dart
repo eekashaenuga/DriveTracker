@@ -20,6 +20,13 @@ import '../features/daily_records/domain/refuel.dart';
 import '../features/daily_records/domain/refuel_service.dart';
 import '../features/home/data/home_repository.dart';
 import '../features/home/domain/vehicle_dashboard.dart';
+import '../features/maintenance/data/maintenance_item_repository.dart';
+import '../features/maintenance/data/service_record_repository.dart';
+import '../features/maintenance/domain/maintenance_item.dart';
+import '../features/maintenance/domain/maintenance_item_service.dart';
+import '../features/maintenance/domain/maintenance_reminder.dart';
+import '../features/maintenance/domain/service_record.dart';
+import '../features/maintenance/domain/service_record_service.dart';
 import '../features/odometer/data/odometer_repository.dart';
 import '../features/odometer/domain/odometer_entry.dart';
 import '../features/odometer/domain/odometer_policy.dart';
@@ -40,10 +47,13 @@ class DriveTrackerController extends ChangeNotifier {
       _refuelRepository = RefuelRepository(database),
       _expenseRepository = ExpenseRepository(database),
       _incomeRepository = IncomeRepository(database),
-      _activityRepository = ActivityRepository(database) {
+      _activityRepository = ActivityRepository(database),
+      _maintenanceItemRepository = MaintenanceItemRepository(database),
+      _serviceRecordRepository = ServiceRecordRepository(database) {
     final financialSummaryRepository = FinancialSummaryRepository(
       refuelRepository: _refuelRepository,
       expenseRepository: _expenseRepository,
+      serviceRecordRepository: _serviceRecordRepository,
     );
     _homeRepository = HomeRepository(
       vehicleRepository: _vehicleRepository,
@@ -51,6 +61,8 @@ class DriveTrackerController extends ChangeNotifier {
       refuelRepository: _refuelRepository,
       financialSummaryRepository: financialSummaryRepository,
       activityRepository: _activityRepository,
+      maintenanceItemRepository: _maintenanceItemRepository,
+      serviceRecordRepository: _serviceRecordRepository,
     );
     _vehicleService = VehicleService(
       database: _database,
@@ -83,6 +95,18 @@ class DriveTrackerController extends ChangeNotifier {
       odometerRepository: _odometerRepository,
       incomeRepository: _incomeRepository,
     );
+    _maintenanceItemService = MaintenanceItemService(
+      vehicleRepository: _vehicleRepository,
+      maintenanceItemRepository: _maintenanceItemRepository,
+      serviceRecordRepository: _serviceRecordRepository,
+    );
+    _serviceRecordService = ServiceRecordService(
+      database: _database,
+      vehicleRepository: _vehicleRepository,
+      maintenanceItemRepository: _maintenanceItemRepository,
+      odometerRepository: _odometerRepository,
+      serviceRecordRepository: _serviceRecordRepository,
+    );
   }
 
   static const _themeSystem = 'system';
@@ -98,6 +122,8 @@ class DriveTrackerController extends ChangeNotifier {
   final ExpenseRepository _expenseRepository;
   final IncomeRepository _incomeRepository;
   final ActivityRepository _activityRepository;
+  final MaintenanceItemRepository _maintenanceItemRepository;
+  final ServiceRecordRepository _serviceRecordRepository;
   late final HomeRepository _homeRepository;
   late final VehicleService _vehicleService;
   late final OdometerService _odometerService;
@@ -105,6 +131,8 @@ class DriveTrackerController extends ChangeNotifier {
   late final RefuelService _refuelService;
   late final ExpenseService _expenseService;
   late final IncomeService _incomeService;
+  late final MaintenanceItemService _maintenanceItemService;
+  late final ServiceRecordService _serviceRecordService;
 
   bool _initialized = false;
   bool _busy = false;
@@ -142,6 +170,10 @@ class DriveTrackerController extends ChangeNotifier {
     return List.unmodifiable(_dashboard?.recentActivity ?? const []);
   }
 
+  MaintenanceReminder? get nextMaintenanceAttention {
+    return _dashboard?.nextMaintenanceAttention;
+  }
+
   Future<int?> currentOdometerForVehicle(String vehicleId) {
     return _odometerRepository.currentOdometerForVehicle(vehicleId);
   }
@@ -171,6 +203,66 @@ class DriveTrackerController extends ChangeNotifier {
   Future<Refuel?> refuelById(String id) => _refuelRepository.getById(id);
   Future<Expense?> expenseById(String id) => _expenseRepository.getById(id);
   Future<Income?> incomeById(String id) => _incomeRepository.getById(id);
+  Future<MaintenanceItem?> maintenanceItemById(String id) {
+    return _maintenanceItemRepository.getById(id);
+  }
+
+  Future<ServiceRecordWithItems?> serviceRecordById(String id) {
+    return _serviceRecordRepository.getWithItems(id);
+  }
+
+  Future<List<MaintenanceItem>> maintenanceItemsForSelectedVehicle({
+    bool includeArchived = false,
+  }) {
+    final vehicle = selectedVehicle;
+    if (vehicle == null) {
+      return Future.value(const []);
+    }
+    return _maintenanceItemRepository.listForVehicle(
+      vehicle.id,
+      includeArchived: includeArchived,
+    );
+  }
+
+  Future<List<MaintenanceItem>> maintenanceItemsForVehicle(
+    String vehicleId, {
+    bool includeArchived = false,
+  }) {
+    return _maintenanceItemRepository.listForVehicle(
+      vehicleId,
+      includeArchived: includeArchived,
+    );
+  }
+
+  Future<List<MaintenanceReminder>> maintenanceRemindersForSelectedVehicle() {
+    final vehicle = selectedVehicle;
+    if (vehicle == null) {
+      return Future.value(const []);
+    }
+    return _maintenanceItemService.remindersForVehicle(
+      vehicle.id,
+      currentOdometer: currentOdometer,
+    );
+  }
+
+  Future<MaintenanceReminder?> maintenanceReminderForItem(
+    MaintenanceItem item,
+  ) async {
+    final current = await currentOdometerForVehicle(item.vehicleId);
+    return _maintenanceItemService.reminderForItem(
+      item,
+      currentOdometer: current,
+    );
+  }
+
+  Future<List<MaintenanceCompletion>> maintenanceHistoryForItem(
+    MaintenanceItem item,
+  ) {
+    return _maintenanceItemService.completionHistoryForItem(
+      item.vehicleId,
+      item.id,
+    );
+  }
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -393,6 +485,89 @@ class DriveTrackerController extends ChangeNotifier {
     return _runMutation(() async {
       final currentVehicleId = selectedVehicle?.id;
       await _incomeService.deleteIncome(incomeId);
+      await _reloadData(preferredVehicleId: currentVehicleId);
+    });
+  }
+
+  Future<MaintenanceItem> addMaintenanceItem(
+    MaintenanceItemDraft draft, {
+    DateTime? baselineDateTime,
+    int? baselineOdometer,
+  }) async {
+    return _runMutation(() async {
+      final item = await _maintenanceItemService.createMaintenanceItem(draft);
+      if (baselineDateTime != null || baselineOdometer != null) {
+        await _serviceRecordService.createBaselineCompletion(
+          item: item,
+          eventDateTime: baselineDateTime ?? DateTime.now(),
+          odometer: baselineOdometer,
+        );
+      }
+      await _reloadData(preferredVehicleId: item.vehicleId);
+      return item;
+    });
+  }
+
+  Future<MaintenanceItem> updateMaintenanceItem(
+    String itemId,
+    MaintenanceItemDraft draft,
+  ) async {
+    return _runMutation(() async {
+      final item = await _maintenanceItemService.updateMaintenanceItem(
+        itemId,
+        draft,
+      );
+      await _reloadData(preferredVehicleId: item.vehicleId);
+      return item;
+    });
+  }
+
+  Future<void> archiveMaintenanceItem(String itemId) async {
+    return _runMutation(() async {
+      final item = await _maintenanceItemRepository.getById(itemId);
+      await _maintenanceItemService.archiveMaintenanceItem(itemId);
+      await _reloadData(preferredVehicleId: item?.vehicleId);
+    });
+  }
+
+  Future<ServiceRecordWithItems> addServiceRecord(
+    ServiceRecordDraft draft, {
+    bool allowHistorical = false,
+    bool confirmLargeIncrease = false,
+  }) async {
+    return _runMutation(() async {
+      final service = await _serviceRecordService.createServiceRecord(
+        draft,
+        allowHistorical: allowHistorical,
+        confirmLargeIncrease: confirmLargeIncrease,
+      );
+      await _reloadData(preferredVehicleId: service.record.vehicleId);
+      return service;
+    });
+  }
+
+  Future<ServiceRecordWithItems> updateServiceRecord(
+    String serviceId,
+    ServiceRecordDraft draft, {
+    bool allowHistorical = false,
+    bool confirmLargeIncrease = false,
+  }) async {
+    return _runMutation(() async {
+      final service = await _serviceRecordService.updateServiceRecord(
+        serviceId,
+        draft,
+        allowHistorical: allowHistorical,
+        confirmLargeIncrease: confirmLargeIncrease,
+      );
+      await _reloadData(preferredVehicleId: service.record.vehicleId);
+      return service;
+    });
+  }
+
+  Future<void> deleteServiceRecord(String serviceId) async {
+    return _runMutation(() async {
+      final currentVehicleId = selectedVehicle?.id;
+      await _serviceRecordService.deleteServiceRecord(serviceId);
       await _reloadData(preferredVehicleId: currentVehicleId);
     });
   }
