@@ -1,5 +1,6 @@
 import '../../daily_records/domain/daily_activity.dart';
 import '../../daily_records/domain/fuel_economy_calculator.dart';
+import '../../maintenance/domain/maintenance_reminder.dart';
 import '../../odometer/domain/odometer_entry.dart';
 import '../../vehicles/domain/vehicle.dart';
 
@@ -12,6 +13,7 @@ class VehicleDashboard {
     required this.latestFuelPriceMicrosPerLitre,
     required this.latestFuelEconomyInterval,
     required this.recentActivity,
+    required this.nextMaintenanceAttention,
   });
 
   final Vehicle vehicle;
@@ -21,4 +23,5 @@ class VehicleDashboard {
   final int? latestFuelPriceMicrosPerLitre;
   final FuelEconomyInterval? latestFuelEconomyInterval;
   final List<DailyActivity> recentActivity;
+  final MaintenanceReminder? nextMaintenanceAttention;
 }

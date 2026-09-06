@@ -11,6 +11,7 @@ import 'package:drivetracker/features/daily_records/domain/fuel_entry_calculator
 import 'package:drivetracker/features/daily_records/domain/income.dart';
 import 'package:drivetracker/features/daily_records/domain/record_category.dart';
 import 'package:drivetracker/features/daily_records/domain/refuel.dart';
+import 'package:drivetracker/features/maintenance/domain/service_record.dart';
 import 'package:drivetracker/features/odometer/domain/odometer_entry.dart';
 import 'package:drivetracker/features/vehicles/domain/vehicle.dart';
 import 'package:drivetracker/features/vehicles/domain/vehicle_draft.dart';
@@ -22,7 +23,7 @@ import 'helpers/test_services.dart';
 
 void main() {
   test(
-    'V1 to V2 migration preserves vehicles, odometer and settings',
+    'V1 to latest migration preserves vehicles, odometer and settings',
     () async {
       sqfliteFfiInit();
       final dir = await Directory.systemTemp.createTemp('drivetracker_v1_');
@@ -56,13 +57,16 @@ void main() {
       addTearDown(database.close);
       final db = await database.database;
 
-      expect(await db.getVersion(), 2);
+      expect(await db.getVersion(), 3);
       expect((await db.query('vehicles')).single['id'], 'veh_1');
       expect((await db.query('odometer_entries')).single['id'], 'odo_1');
       expect((await db.query('app_settings')).single['value'], 'veh_1');
       expect(await db.query('refuels'), isEmpty);
       expect(await db.query('expenses'), isEmpty);
       expect(await db.query('income_records'), isEmpty);
+      expect(await db.query('maintenance_items'), isEmpty);
+      expect(await db.query('services'), isEmpty);
+      expect(await db.query('service_items'), isEmpty);
       expect(
         (await db.query(
           'record_categories',
@@ -439,7 +443,7 @@ void main() {
   });
 
   test(
-    'financial aggregation counts spending once and excludes income',
+    'financial aggregation counts service totals once and excludes income',
     () async {
       final services = createTestServices();
       final vehicle = await services.vehicleService.addVehicle(_draft(1000));
@@ -471,13 +475,25 @@ void main() {
           amountMinor: 9999,
         ),
       );
+      await services.serviceRecordService.createServiceRecord(
+        ServiceRecordDraft(
+          vehicleId: vehicle.id,
+          eventDateTime: DateTime.utc(2026, 1, 10),
+          odometer: 1200,
+          totalCostMinor: 24000,
+          items: const [
+            ServiceItemDraft(itemName: 'Engine Oil', allocatedCostMinor: 12000),
+            ServiceItemDraft(itemName: 'Oil Filter', allocatedCostMinor: 4000),
+          ],
+        ),
+      );
 
       expect(
         await services.financialSummary.monthSpendForVehicle(
           vehicle.id,
           now: DateTime.utc(2026, 1, 20),
         ),
-        7000,
+        31000,
       );
     },
   );

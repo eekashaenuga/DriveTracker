@@ -43,10 +43,18 @@ class MoreScreen extends StatelessWidget {
               leading: const Icon(Icons.history_rounded),
               title: const Text('History'),
               subtitle: const Text(
-                'Fuel, expense, income and odometer records',
+                'Fuel, expense, income, service and odometer records',
               ),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => AppNavigation.openHistory(context),
+            ),
+            ListTile(
+              key: const Key('moreMaintenanceTile'),
+              leading: const Icon(Icons.handyman_rounded),
+              title: const Text('Maintenance'),
+              subtitle: const Text('Service intervals and item history'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => AppNavigation.openMaintenance(context),
             ),
             const DTSectionHeader(title: 'Planned'),
             const _ComingLaterTile(

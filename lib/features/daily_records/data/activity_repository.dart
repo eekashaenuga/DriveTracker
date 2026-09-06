@@ -26,6 +26,9 @@ class ActivityRepository {
     if (type == DailyActivityType.all || type == DailyActivityType.income) {
       activities.addAll(await _income(db, vehicleId, limit));
     }
+    if (type == DailyActivityType.all || type == DailyActivityType.service) {
+      activities.addAll(await _services(db, vehicleId, limit));
+    }
     if (type == DailyActivityType.all || type == DailyActivityType.odometer) {
       activities.addAll(await _manualOdometers(db, vehicleId, limit));
     }
@@ -162,11 +165,73 @@ class ActivityRepository {
     ];
   }
 
+  Future<List<DailyActivity>> _services(
+    sqflite.DatabaseExecutor db,
+    String vehicleId,
+    int limit,
+  ) async {
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        s.*,
+        (
+          SELECT si.item_name
+          FROM service_items si
+          WHERE si.service_id = s.id
+          ORDER BY si.created_at ASC
+          LIMIT 1
+        ) AS first_item_name,
+        (
+          SELECT COUNT(*)
+          FROM service_items si
+          WHERE si.service_id = s.id
+        ) AS item_count
+      FROM services s
+      WHERE s.vehicle_id = ?
+      ORDER BY s.event_datetime DESC, s.created_at DESC
+      LIMIT ?
+      ''',
+      [vehicleId, limit],
+    );
+    return [
+      for (final row in rows)
+        DailyActivity(
+          type: DailyActivityType.service,
+          recordId: row['id'] as String,
+          vehicleId: row['vehicle_id'] as String,
+          eventDateTime: DateTime.parse(row['event_datetime'] as String),
+          createdAt: DateTime.parse(row['created_at'] as String),
+          title: row['is_baseline'] == 1 ? 'Maintenance baseline' : 'Service',
+          subtitle: _join([
+            row['garage'] as String?,
+            _serviceItemSummary(
+              row['first_item_name'] as String?,
+              row['item_count'] as int,
+            ),
+          ]),
+          amountMinor: row['is_baseline'] == 1
+              ? null
+              : row['total_cost_minor'] as int,
+          odometer: row['odometer'] as int?,
+        ),
+    ];
+  }
+
   String _join(List<String?> values) {
     return values
         .where((value) => value != null && value.trim().isNotEmpty)
         .map((value) => value!.trim())
         .join(' / ');
+  }
+
+  String? _serviceItemSummary(String? firstItemName, int itemCount) {
+    if (firstItemName == null || firstItemName.trim().isEmpty) {
+      return null;
+    }
+    if (itemCount <= 1) {
+      return firstItemName;
+    }
+    return '$firstItemName + ${itemCount - 1} more';
   }
 
   Future<sqflite.DatabaseExecutor> _executor(
