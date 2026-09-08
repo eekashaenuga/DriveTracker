@@ -13,6 +13,7 @@ import 'package:drivetracker/features/daily_records/domain/category_service.dart
 import 'package:drivetracker/features/daily_records/domain/expense_service.dart';
 import 'package:drivetracker/features/daily_records/domain/income_service.dart';
 import 'package:drivetracker/features/daily_records/domain/refuel_service.dart';
+import 'package:drivetracker/features/home/data/home_repository.dart';
 import 'package:drivetracker/features/maintenance/data/maintenance_item_repository.dart';
 import 'package:drivetracker/features/maintenance/data/service_record_repository.dart';
 import 'package:drivetracker/features/maintenance/domain/maintenance_item_service.dart';
@@ -101,6 +102,15 @@ class TestServices {
       expenseRepository: expenses,
       serviceRecordRepository: serviceRecords,
     );
+    homeRepository = HomeRepository(
+      vehicleRepository: vehicles,
+      odometerRepository: odometers,
+      refuelRepository: refuels,
+      financialSummaryRepository: financialSummary,
+      activityRepository: activities,
+      maintenanceItemRepository: maintenanceItems,
+      serviceRecordRepository: serviceRecords,
+    );
     maintenanceItemService = MaintenanceItemService(
       vehicleRepository: vehicles,
       maintenanceItemRepository: maintenanceItems,
@@ -137,6 +147,7 @@ class TestServices {
   late final ExpenseService expenseService;
   late final IncomeService incomeService;
   late final FinancialSummaryRepository financialSummary;
+  late final HomeRepository homeRepository;
   late final MaintenanceItemService maintenanceItemService;
   late final ServiceRecordService serviceRecordService;
 }
