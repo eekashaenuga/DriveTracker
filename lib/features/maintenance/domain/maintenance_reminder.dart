@@ -53,4 +53,34 @@ class MaintenanceReminder {
   bool get shouldShowAsReminder {
     return item.reminderEnabled && item.hasInterval && !item.isArchived;
   }
+
+  double? get intervalProgress {
+    return switch (primaryBasis) {
+      MaintenanceReminderBasis.mileage => _mileageProgress(),
+      MaintenanceReminderBasis.date => _dateProgress(),
+      MaintenanceReminderBasis.none => null,
+    };
+  }
+
+  double? _mileageProgress() {
+    final interval = item.mileageInterval;
+    final remaining = milesRemaining;
+    if (interval == null || interval <= 0 || remaining == null) {
+      return null;
+    }
+    return _clampedProgress(interval - remaining, interval);
+  }
+
+  double? _dateProgress() {
+    final interval = item.timeIntervalDays;
+    final remaining = daysRemaining;
+    if (interval == null || interval <= 0 || remaining == null) {
+      return null;
+    }
+    return _clampedProgress(interval - remaining, interval);
+  }
+
+  double _clampedProgress(int elapsed, int interval) {
+    return (elapsed / interval).clamp(0.0, 1.0).toDouble();
+  }
 }

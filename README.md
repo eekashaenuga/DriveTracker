@@ -4,7 +4,7 @@ DriveTracker is a local-first Flutter application for managing vehicles, mileage
 
 ## Current Milestone
 
-Implemented through Milestone 3:
+Implemented through Milestone 4:
 
 - Material 3 app shell with Home, Insights, central add action, Reminders, and More.
 - First-run flow from welcome screen to adding the first vehicle.
@@ -24,13 +24,13 @@ Implemented through Milestone 3:
 - Zero-cost baseline maintenance history for establishing last-completed mileage/date without creating fake spend.
 - Functional Reminders screen for the selected vehicle, including direct "Record service" flows.
 - Unified History for fuel, expense, income, service, and manual odometer records.
-- Home dashboard backed by stored vehicle, odometer, refuel, expense, service, and maintenance reminder data.
+- Home dashboard backed by stored vehicle, odometer, refuel, expense, service, and maintenance reminder data, including selected-vehicle switching, odometer updates, monthly spend, latest fuel price, latest full-to-full MPG, maintenance attention, recent activity, History access, and a six-month spending trend.
 - Settings foundation for system, light, and dark theme preferences.
-- Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, aggregation, migrations, and important UI flows.
+- Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, Home dashboard aggregation, spending trends, migrations, layout states, and important UI flows.
 
 Deferred to later milestones:
 
-- Documents, notifications, advanced Insights, charts, exports, backup/restore, sync, accounts, OCR, and external vehicle integrations.
+- Documents, notifications, advanced Insights, richer charts, exports, backup/restore, sync, accounts, OCR, and external vehicle integrations.
 
 ## Technology
 

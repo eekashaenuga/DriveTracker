@@ -159,6 +159,14 @@ Income is not included in spending. Refuels do not generate standalone expense r
 
 Month spending uses `event_datetime` and the user's local calendar month, not `created_at`.
 
+Six-month spending trends are fixed local-calendar month buckets ending with the current month. Empty months remain present with zero spend so Home can render a truthful trend without inventing values.
+
+## Home Dashboard
+
+`HomeRepository` composes the selected vehicle dashboard from existing repositories instead of storing a duplicated dashboard snapshot. The dashboard contract includes the vehicle identity, current odometer, recent odometer entries, current-month spending, latest refuel price, latest valid full-to-full MPG interval, recent activity, maintenance attention, and six-month spending trend.
+
+Home maintenance attention only surfaces active reminder-enabled items that need setup or are upcoming, due soon, due, or overdue. Normal and archived items remain available in maintenance screens but do not crowd the Home dashboard.
+
 ## Dependency Decisions
 
 - `sqflite` is the mature mobile SQLite package used for Android persistence.

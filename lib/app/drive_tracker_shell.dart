@@ -30,11 +30,8 @@ class _DriveTrackerShellState extends State<DriveTrackerShell> {
     return Scaffold(
       body: IndexedStack(index: _index, children: screens),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: FloatingActionButton(
-        key: const Key('mainActionButton'),
+      floatingActionButton: _ActionFab(
         onPressed: () => _showActionSheet(context),
-        tooltip: 'Add entry',
-        child: const Icon(Icons.add_rounded),
       ),
       bottomNavigationBar: BottomAppBar(
         height: 78,
@@ -77,6 +74,50 @@ class _DriveTrackerShellState extends State<DriveTrackerShell> {
       context: context,
       builder: (sheetContext) => _ActionSheet(parentContext: context),
     );
+  }
+}
+
+class _ActionFab extends StatefulWidget {
+  const _ActionFab({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_ActionFab> createState() => _ActionFabState();
+}
+
+class _ActionFabState extends State<_ActionFab> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.maybeOf(context);
+    final reduceMotion =
+        media?.disableAnimations == true || media?.accessibleNavigation == true;
+
+    return GestureDetector(
+      onTapDown: (_) => _setPressed(true),
+      onTapCancel: () => _setPressed(false),
+      onTapUp: (_) => _setPressed(false),
+      child: AnimatedScale(
+        scale: _pressed && !reduceMotion ? 0.94 : 1,
+        duration: reduceMotion ? Duration.zero : DTDurations.fast,
+        curve: Curves.easeOutCubic,
+        child: FloatingActionButton(
+          key: const Key('mainActionButton'),
+          onPressed: widget.onPressed,
+          tooltip: 'Add entry',
+          child: const Icon(Icons.add_rounded),
+        ),
+      ),
+    );
+  }
+
+  void _setPressed(bool pressed) {
+    if (_pressed == pressed || !mounted) {
+      return;
+    }
+    setState(() => _pressed = pressed);
   }
 }
 
@@ -140,72 +181,185 @@ class _ActionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: DTSpacing.lg,
-        right: DTSpacing.lg,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + DTSpacing.xl,
+    final theme = Theme.of(context);
+    final actions = [
+      _ActionItem(
+        key: const Key('actionRefuelTile'),
+        icon: Icons.local_gas_station_rounded,
+        title: 'Refuel',
+        subtitle: 'Fuel cost, volume and odometer',
+        onTap: () => AppNavigation.openRefuel(parentContext),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Add entry',
-            style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800),
+      _ActionItem(
+        key: const Key('actionExpenseTile'),
+        icon: Icons.payments_outlined,
+        title: 'Expense',
+        subtitle: 'Parking, tax, repairs and more',
+        onTap: () => AppNavigation.openExpense(parentContext),
+      ),
+      _ActionItem(
+        key: const Key('actionIncomeTile'),
+        icon: Icons.work_outline_rounded,
+        title: 'Income',
+        subtitle: 'Vehicle-related income',
+        onTap: () => AppNavigation.openIncome(parentContext),
+      ),
+      _ActionItem(
+        key: const Key('actionServiceTile'),
+        icon: Icons.build_circle_outlined,
+        title: 'Service',
+        subtitle: 'Garage visits and maintenance items',
+        onTap: () => AppNavigation.openService(parentContext),
+      ),
+      _ActionItem(
+        key: const Key('actionOdometerTile'),
+        icon: Icons.speed_rounded,
+        title: 'Odometer',
+        subtitle: 'Record a manual reading',
+        onTap: () => AppNavigation.openUpdateOdometer(parentContext),
+      ),
+    ];
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+      ),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          DTSpacing.lg,
+          0,
+          DTSpacing.lg,
+          MediaQuery.viewInsetsOf(context).bottom + DTSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.add_circle_outline_rounded,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: DTSpacing.sm),
+                Text(
+                  'Add entry',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: DTSpacing.md),
+            for (final action in actions) ...[
+              if (action != actions.first) const SizedBox(height: DTSpacing.sm),
+              _ActionTile(
+                item: action,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  action.onTap();
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionItem {
+  const _ActionItem({
+    required this.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final Key key;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+}
+
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({required this.item, required this.onTap});
+
+  final _ActionItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Semantics(
+      button: true,
+      label: item.title,
+      child: Material(
+        key: item.key,
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.42),
+        borderRadius: DTRadii.cardRadius,
+        child: InkWell(
+          borderRadius: DTRadii.cardRadius,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: DTSpacing.md,
+              vertical: 10,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: colors.primaryContainer.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(DTRadii.card),
+                  ),
+                  child: Icon(
+                    item.icon,
+                    color: colors.onPrimaryContainer,
+                    size: DTIconSizes.md,
+                  ),
+                ),
+                const SizedBox(width: DTSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        item.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: DTSpacing.sm),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: colors.onSurfaceVariant,
+                  size: DTIconSizes.md,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: DTSpacing.md),
-          ListTile(
-            key: const Key('actionRefuelTile'),
-            leading: const Icon(Icons.local_gas_station_rounded),
-            title: const Text('Refuel'),
-            subtitle: const Text('Fuel cost, volume and odometer'),
-            onTap: () {
-              Navigator.of(context).pop();
-              AppNavigation.openRefuel(parentContext);
-            },
-          ),
-          ListTile(
-            key: const Key('actionExpenseTile'),
-            leading: const Icon(Icons.payments_outlined),
-            title: const Text('Expense'),
-            subtitle: const Text('Parking, tax, repairs and more'),
-            onTap: () {
-              Navigator.of(context).pop();
-              AppNavigation.openExpense(parentContext);
-            },
-          ),
-          ListTile(
-            key: const Key('actionIncomeTile'),
-            leading: const Icon(Icons.work_outline_rounded),
-            title: const Text('Income'),
-            subtitle: const Text('Vehicle-related income'),
-            onTap: () {
-              Navigator.of(context).pop();
-              AppNavigation.openIncome(parentContext);
-            },
-          ),
-          ListTile(
-            key: const Key('actionServiceTile'),
-            leading: const Icon(Icons.build_circle_outlined),
-            title: const Text('Service'),
-            subtitle: const Text('Garage visits and maintenance items'),
-            onTap: () {
-              Navigator.of(context).pop();
-              AppNavigation.openService(parentContext);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.speed_rounded),
-            title: const Text('Odometer'),
-            subtitle: const Text('Record a manual reading'),
-            onTap: () {
-              Navigator.of(context).pop();
-              AppNavigation.openUpdateOdometer(parentContext);
-            },
-          ),
-        ],
+        ),
       ),
     );
   }

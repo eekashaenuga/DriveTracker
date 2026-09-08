@@ -32,11 +32,15 @@ class HomeRepository {
   final ServiceRecordRepository serviceRecordRepository;
   final MaintenanceReminderEngine _reminderEngine;
 
-  Future<VehicleDashboard> getVehicleDashboard(String vehicleId) async {
+  Future<VehicleDashboard> getVehicleDashboard(
+    String vehicleId, {
+    DateTime? now,
+  }) async {
     final vehicle = await vehicleRepository.getById(vehicleId);
     if (vehicle == null) {
       throw const ValidationException(['Vehicle not found.']);
     }
+    final asOf = now ?? DateTime.now();
 
     final currentOdometer = await odometerRepository.currentOdometerForVehicle(
       vehicleId,
@@ -46,7 +50,9 @@ class HomeRepository {
       limit: 6,
     );
     final monthSpendMinor = await financialSummaryRepository
-        .monthSpendForVehicle(vehicleId);
+        .monthSpendForVehicle(vehicleId, now: asOf);
+    final spendingTrend = await financialSummaryRepository
+        .spendingTrendForVehicle(vehicleId, now: asOf);
     final latestRefuel = await financialSummaryRepository
         .latestRefuelForVehicle(vehicleId);
     final refuels = await refuelRepository.listForVehicle(
@@ -59,7 +65,7 @@ class HomeRepository {
     );
     final recentActivity = await activityRepository.listForVehicle(
       vehicleId,
-      limit: 6,
+      limit: 5,
     );
     final maintenanceItems = await maintenanceItemRepository.listForVehicle(
       vehicleId,
@@ -73,11 +79,11 @@ class HomeRepository {
           item: item,
           completions: completions,
           currentOdometer: currentOdometer,
-          asOf: DateTime.now(),
+          asOf: asOf,
         ),
       );
     }
-    final nextMaintenanceAttention = _reminderEngine.mostUrgent(reminders);
+    final nextMaintenanceAttention = _homeMaintenanceAttention(reminders);
 
     return VehicleDashboard(
       vehicle: vehicle,
@@ -88,6 +94,23 @@ class HomeRepository {
       latestFuelEconomyInterval: latestFuelEconomyInterval,
       recentActivity: recentActivity,
       nextMaintenanceAttention: nextMaintenanceAttention,
+      spendingTrend: spendingTrend,
     );
+  }
+
+  MaintenanceReminder? _homeMaintenanceAttention(
+    Iterable<MaintenanceReminder> reminders,
+  ) {
+    final sorted = _reminderEngine.sortByUrgency(
+      reminders.where((reminder) => reminder.shouldShowAsReminder),
+    );
+    for (final reminder in sorted) {
+      if (reminder.primaryBasis == MaintenanceReminderBasis.none ||
+          reminder.state.severity >=
+              MaintenanceReminderState.upcoming.severity) {
+        return reminder;
+      }
+    }
+    return null;
   }
 }

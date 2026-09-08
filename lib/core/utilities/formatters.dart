@@ -36,6 +36,22 @@ class DTFormatters {
     return '${local.year}-${_two(local.month)}-${_two(local.day)}';
   }
 
+  static String activityDateTime(DateTime value, {DateTime? now}) {
+    final local = value.toLocal();
+    final localNow = (now ?? DateTime.now()).toLocal();
+    final eventDay = DateTime(local.year, local.month, local.day);
+    final today = DateTime(localNow.year, localNow.month, localNow.day);
+    final dayDifference = today.difference(eventDay).inDays;
+    return switch (dayDifference) {
+      0 => 'Today, ${_twelveHourTime(local)}',
+      1 => 'Yesterday, ${_twelveHourTime(local)}',
+      _ =>
+        local.year == localNow.year
+            ? '${local.day} ${_monthShort(local.month)}'
+            : '${local.day} ${_monthShort(local.month)} ${local.year}',
+    };
+  }
+
   static String moneyMinor(int? value) {
     return MoneyAmount.formatMinor(value);
   }
@@ -53,4 +69,28 @@ class DTFormatters {
   }
 
   static String _two(int value) => value.toString().padLeft(2, '0');
+
+  static String _monthShort(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return months[month - 1];
+  }
+
+  static String _twelveHourTime(DateTime value) {
+    final period = value.hour >= 12 ? 'PM' : 'AM';
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    return '$hour:${_two(value.minute)} $period';
+  }
 }

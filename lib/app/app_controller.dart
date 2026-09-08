@@ -15,6 +15,7 @@ import '../features/daily_records/domain/expense_service.dart';
 import '../features/daily_records/domain/fuel_economy_calculator.dart';
 import '../features/daily_records/domain/income.dart';
 import '../features/daily_records/domain/income_service.dart';
+import '../features/daily_records/domain/monthly_spending.dart';
 import '../features/daily_records/domain/record_category.dart';
 import '../features/daily_records/domain/refuel.dart';
 import '../features/daily_records/domain/refuel_service.dart';
@@ -38,18 +39,21 @@ import '../features/vehicles/domain/vehicle_draft.dart';
 import '../features/vehicles/domain/vehicle_service.dart';
 
 class DriveTrackerController extends ChangeNotifier {
-  DriveTrackerController({required AppDatabase database})
-    : _database = database,
-      _vehicleRepository = VehicleRepository(database),
-      _odometerRepository = OdometerRepository(database),
-      _settingsRepository = SettingsRepository(database),
-      _categoryRepository = CategoryRepository(database),
-      _refuelRepository = RefuelRepository(database),
-      _expenseRepository = ExpenseRepository(database),
-      _incomeRepository = IncomeRepository(database),
-      _activityRepository = ActivityRepository(database),
-      _maintenanceItemRepository = MaintenanceItemRepository(database),
-      _serviceRecordRepository = ServiceRecordRepository(database) {
+  DriveTrackerController({
+    required AppDatabase database,
+    DateTime Function()? clock,
+  }) : _database = database,
+       _clock = clock ?? DateTime.now,
+       _vehicleRepository = VehicleRepository(database),
+       _odometerRepository = OdometerRepository(database),
+       _settingsRepository = SettingsRepository(database),
+       _categoryRepository = CategoryRepository(database),
+       _refuelRepository = RefuelRepository(database),
+       _expenseRepository = ExpenseRepository(database),
+       _incomeRepository = IncomeRepository(database),
+       _activityRepository = ActivityRepository(database),
+       _maintenanceItemRepository = MaintenanceItemRepository(database),
+       _serviceRecordRepository = ServiceRecordRepository(database) {
     final financialSummaryRepository = FinancialSummaryRepository(
       refuelRepository: _refuelRepository,
       expenseRepository: _expenseRepository,
@@ -114,6 +118,7 @@ class DriveTrackerController extends ChangeNotifier {
   static const _themeDark = 'dark';
 
   final AppDatabase _database;
+  final DateTime Function() _clock;
   final VehicleRepository _vehicleRepository;
   final OdometerRepository _odometerRepository;
   final SettingsRepository _settingsRepository;
@@ -146,6 +151,7 @@ class DriveTrackerController extends ChangeNotifier {
   bool get isBusy => _busy;
   String? get errorMessage => _errorMessage;
   ThemeMode get themeMode => _themeMode;
+  DateTime get currentTime => _clock();
   List<Vehicle> get activeVehicles => List.unmodifiable(_activeVehicles);
   List<Vehicle> get archivedVehicles => List.unmodifiable(_archivedVehicles);
   bool get hasAnyVehicles =>
@@ -172,6 +178,10 @@ class DriveTrackerController extends ChangeNotifier {
 
   MaintenanceReminder? get nextMaintenanceAttention {
     return _dashboard?.nextMaintenanceAttention;
+  }
+
+  List<MonthlySpending> get spendingTrend {
+    return List.unmodifiable(_dashboard?.spendingTrend ?? const []);
   }
 
   Future<int?> currentOdometerForVehicle(String vehicleId) {
@@ -499,7 +509,7 @@ class DriveTrackerController extends ChangeNotifier {
       if (baselineDateTime != null || baselineOdometer != null) {
         await _serviceRecordService.createBaselineCompletion(
           item: item,
-          eventDateTime: baselineDateTime ?? DateTime.now(),
+          eventDateTime: baselineDateTime ?? _clock(),
           odometer: baselineOdometer,
         );
       }
@@ -617,7 +627,10 @@ class DriveTrackerController extends ChangeNotifier {
     if (selected.id != selectedId) {
       await _settingsRepository.setSelectedVehicleId(selected.id);
     }
-    _dashboard = await _homeRepository.getVehicleDashboard(selected.id);
+    _dashboard = await _homeRepository.getVehicleDashboard(
+      selected.id,
+      now: _clock(),
+    );
   }
 
   Vehicle? _findActiveVehicle(String? vehicleId) {

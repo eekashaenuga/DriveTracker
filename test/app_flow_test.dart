@@ -1,7 +1,12 @@
 import 'package:drivetracker/app/app.dart';
 import 'package:drivetracker/app/app_controller.dart';
+import 'package:drivetracker/app/theme/dt_theme.dart';
 import 'package:drivetracker/features/daily_records/domain/daily_activity.dart';
+import 'package:drivetracker/features/daily_records/domain/expense.dart';
+import 'package:drivetracker/features/daily_records/domain/income.dart';
 import 'package:drivetracker/features/daily_records/domain/record_category.dart';
+import 'package:drivetracker/features/daily_records/domain/refuel.dart';
+import 'package:drivetracker/features/home/presentation/home_screen.dart';
 import 'package:drivetracker/features/maintenance/domain/maintenance_item.dart';
 import 'package:drivetracker/features/maintenance/domain/maintenance_reminder.dart';
 import 'package:drivetracker/features/maintenance/domain/service_record.dart';
@@ -9,6 +14,7 @@ import 'package:drivetracker/features/vehicles/domain/vehicle.dart';
 import 'package:drivetracker/features/vehicles/domain/vehicle_draft.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import 'helpers/test_services.dart';
 
@@ -47,25 +53,82 @@ void main() {
 
   testWidgets('switching vehicle updates Home immediately', (tester) async {
     final services = createTestServices();
+    final now = DateTime.utc(2026, 9, 20, 12);
+    late Vehicle commuter;
+    late Vehicle weekend;
     await tester.runAsync(() async {
-      await services.vehicleService.addVehicle(_draft('Commuter', 1000));
-      await services.vehicleService.addVehicle(_draft('Weekend', 25000));
+      commuter = await services.vehicleService.addVehicle(
+        _draft('Commuter', 1000),
+      );
+      weekend = await services.vehicleService.addVehicle(
+        _draft('Weekend', 25000),
+      );
+      await services.refuelService.createRefuel(
+        _refuelDraft(
+          commuter.id,
+          eventDateTime: DateTime.utc(2026, 9, 16, 8),
+          odometer: 1100,
+          totalCostMinor: 5000,
+          unitPriceMicrosPerLitre: 1250000,
+        ),
+      );
+      await services.refuelService.createRefuel(
+        _refuelDraft(
+          weekend.id,
+          eventDateTime: DateTime.utc(2026, 9, 18, 8),
+          odometer: 25100,
+          totalCostMinor: 6000,
+          unitPriceMicrosPerLitre: 1500000,
+        ),
+      );
     });
 
     await _pumpApp(
       tester,
       services,
       find.byKey(const Key('selectedVehicleButton')),
+      now: now,
     );
 
     expect(find.text('Weekend'), findsWidgets);
+    expect(find.text('25,100 mi'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeMonthSpendMetric')),
+        matching: find.text('£60.00'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeFuelPriceMetric')),
+        matching: find.text('150 p/L'),
+      ),
+      findsOneWidget,
+    );
     await _tapAndPump(tester, find.byKey(const Key('selectedVehicleButton')));
     await _pumpUntilFound(tester, find.text('Select vehicle'));
     await _tapAndRunAsync(tester, find.text('Commuter').last);
-    await _pumpUntilFound(tester, find.text('1,000 mi'));
+    await _pumpUntilFound(tester, find.text('1,100 mi'));
 
     expect(find.text('Commuter'), findsWidgets);
-    expect(find.text('1,000 mi'), findsWidgets);
+    expect(find.text('1,100 mi'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeMonthSpendMetric')),
+        matching: find.text('£50.00'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeFuelPriceMetric')),
+        matching: find.text('125 p/L'),
+      ),
+      findsOneWidget,
+    );
+    await _scrollUntilFound(tester, find.byKey(const Key('homeSpendingTrend')));
+    expect(find.text('Sep · £50.00 spent'), findsOneWidget);
   });
 
   testWidgets('update odometer flow refreshes Home', (tester) async {
@@ -100,7 +163,300 @@ void main() {
     expect(find.text('65,142 mi'), findsWidgets);
   });
 
+  testWidgets('Home dashboard renders stored summaries', (tester) async {
+    final services = createTestServices();
+    final now = DateTime.utc(2026, 9, 20, 12);
+    late Vehicle vehicle;
+    late String serviceId;
+    await tester.runAsync(() async {
+      final expenseCategory = await _firstCategory(
+        services,
+        RecordCategoryType.expense,
+      );
+      final incomeCategory = await _firstCategory(
+        services,
+        RecordCategoryType.income,
+      );
+      vehicle = await services.vehicleService.addVehicle(
+        _draft('Commuter', 64000),
+      );
+      await services.refuelService.createRefuel(
+        _refuelDraft(
+          vehicle.id,
+          eventDateTime: DateTime.utc(2026, 8, 10, 8),
+          odometer: 64100,
+          totalCostMinor: 5000,
+          unitPriceMicrosPerLitre: 1250000,
+        ),
+      );
+      await services.refuelService.createRefuel(
+        _refuelDraft(
+          vehicle.id,
+          eventDateTime: DateTime.utc(2026, 9, 10, 8),
+          odometer: 64500,
+          totalCostMinor: 6000,
+          unitPriceMicrosPerLitre: 1500000,
+        ),
+      );
+      await services.expenseService.createExpense(
+        ExpenseDraft(
+          vehicleId: vehicle.id,
+          categoryId: expenseCategory.id,
+          eventDateTime: DateTime.utc(2026, 9, 11, 8),
+          amountMinor: 1200,
+          merchant: 'Tyre Shop',
+        ),
+      );
+      await services.incomeService.createIncome(
+        IncomeDraft(
+          vehicleId: vehicle.id,
+          categoryId: incomeCategory.id,
+          eventDateTime: DateTime.utc(2026, 9, 12, 8),
+          amountMinor: 4500,
+          source: 'Mileage reclaim',
+        ),
+      );
+      final service = await services.serviceRecordService.createServiceRecord(
+        ServiceRecordDraft(
+          vehicleId: vehicle.id,
+          eventDateTime: DateTime.utc(2026, 9, 13, 8),
+          odometer: 64600,
+          totalCostMinor: 9000,
+          garage: 'ABC Garage',
+          items: const [ServiceItemDraft(itemName: 'Inspection')],
+        ),
+      );
+      serviceId = service.record.id;
+      final oil = await services.maintenanceItemService.createMaintenanceItem(
+        MaintenanceItemDraft(
+          vehicleId: vehicle.id,
+          name: 'Engine Oil',
+          mileageInterval: 8000,
+        ),
+      );
+      await services.serviceRecordService.createBaselineCompletion(
+        item: oil,
+        eventDateTime: DateTime.utc(2026, 5, 1, 8),
+        odometer: 56600,
+      );
+    });
+
+    await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('homeMonthSpendMetric')),
+      now: now,
+    );
+
+    expect(find.text('Commuter'), findsWidgets);
+    expect(find.text('64,600 mi'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeMonthSpendMetric')),
+        matching: find.text('£162.00'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeFuelPriceMetric')),
+        matching: find.text('150 p/L'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeFuelEconomyMetric')),
+        matching: find.text('45.5 UK MPG'),
+      ),
+      findsOneWidget,
+    );
+
+    await _scrollUntilFound(tester, find.text('Engine Oil'));
+    expect(find.textContaining('Due now'), findsWidgets);
+    expect(find.byKey(const Key('homeMaintenanceProgress')), findsOneWidget);
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('homeMaintenanceAttentionTile')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('editMaintenanceItemButton')),
+    );
+    expect(find.text('Engine Oil'), findsWidgets);
+    await _tapAndPump(tester, find.byTooltip('Back'));
+    await _pumpUntilFound(tester, find.byKey(const Key('homeDashboardList')));
+
+    await _scrollUntilFound(tester, find.byKey(const Key('homeSpendingTrend')));
+    expect(find.byKey(const Key('homeTrendBar_2026_8')), findsOneWidget);
+    expect(find.byKey(const Key('homeTrendBar_2026_9')), findsOneWidget);
+    expect(find.text('Sep · £162.00 spent'), findsOneWidget);
+    expect(find.text('£0.00'), findsNothing);
+    expect(find.text('£50.00'), findsWidgets);
+    expect(find.text('£162.00'), findsWidgets);
+    await _tapAndPump(tester, find.byKey(const Key('homeTrendMonth_2026_7')));
+    await _pumpUntilFound(tester, find.text('Jul · £0.00 spent'));
+    expect(find.text('£0.00'), findsOneWidget);
+
+    final serviceRow = find.byKey(Key('homeActivity_service_$serviceId'));
+    await _scrollUntilFound(tester, serviceRow);
+    expect(serviceRow, findsOneWidget);
+    expect(
+      find.descendant(of: serviceRow, matching: find.text('Service')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Home activity opens records and View all opens History', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    final now = DateTime.utc(2026, 9, 20, 12);
+    late String refuelId;
+    await tester.runAsync(() async {
+      final vehicle = await services.vehicleService.addVehicle(
+        _draft('Commuter', 64000),
+      );
+      final refuel = await services.refuelService.createRefuel(
+        _refuelDraft(
+          vehicle.id,
+          eventDateTime: DateTime.utc(2026, 9, 20, 10),
+          odometer: 64100,
+          totalCostMinor: 5000,
+          unitPriceMicrosPerLitre: 1250000,
+        ),
+      );
+      refuelId = refuel.id;
+    });
+
+    await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('homeMonthSpendMetric')),
+      now: now,
+    );
+
+    await _scrollUntilFound(
+      tester,
+      find.byKey(const Key('homeViewAllHistoryButton')),
+    );
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('homeViewAllHistoryButton')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('historyActivity_refuel_$refuelId')),
+    );
+    expect(find.text('History'), findsWidgets);
+
+    await _tapAndPump(tester, find.byTooltip('Back'));
+    await _pumpUntilFound(tester, find.byKey(const Key('homeDashboardList')));
+
+    final activityRow = find.byKey(Key('homeActivity_refuel_$refuelId'));
+    await _scrollUntilFound(tester, activityRow);
+    expect(
+      find.descendant(of: activityRow, matching: find.textContaining('Today,')),
+      findsOneWidget,
+    );
+    await _tapAndRunAsync(tester, activityRow);
+    await _pumpUntilFound(tester, find.text('Edit refuel'));
+
+    final totalCostField = tester.widget<TextFormField>(
+      find.byKey(const Key('refuelTotalCostField')),
+    );
+    expect(totalCostField.controller?.text, '50.00');
+  });
+
+  testWidgets('Home dashboard handles dark narrow empty-spend state', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final services = createTestServices();
+    final now = DateTime.utc(2026, 9, 20, 12);
+    const longVehicleName = 'Very Long Commuter Name That Should Ellipsize';
+    await tester.runAsync(() async {
+      await services.vehicleService.addVehicle(
+        _draft(longVehicleName, 1234567),
+      );
+    });
+
+    final controller = await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('homeMonthSpendMetric')),
+      now: now,
+    );
+    await tester.runAsync(() => controller.setThemeMode(ThemeMode.dark));
+    await tester.pump();
+
+    expect(find.text(longVehicleName), findsWidgets);
+    expect(find.text('1,234,567 mi'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeFuelPriceMetric')),
+        matching: find.text('No fuel data'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('homeFuelEconomyMetric')),
+        matching: find.text('Not enough data'),
+      ),
+      findsOneWidget,
+    );
+    await _scrollUntilFound(tester, find.text('No maintenance due soon'));
+    expect(find.byKey(const Key('homeMaintenanceProgress')), findsNothing);
+    await _scrollUntilFound(
+      tester,
+      find.byKey(const Key('homeSpendingTrendEmpty')),
+    );
+
+    expect(find.text('No spending trend yet'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Home dashboard supports reduced-motion media settings', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    final now = DateTime.utc(2026, 9, 20, 12);
+    await tester.runAsync(() async {
+      await services.vehicleService.addVehicle(_draft('Commuter', 64000));
+    });
+    final controller = DriveTrackerController(
+      database: services.database,
+      clock: () => now,
+    );
+    addTearDown(controller.dispose);
+    await tester.runAsync(controller.initialize);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: DTTheme.light(),
+        home: ChangeNotifierProvider.value(
+          value: controller,
+          child: const MediaQuery(
+            data: MediaQueryData(disableAnimations: true),
+            child: HomeScreen(),
+          ),
+        ),
+      ),
+    );
+    await _pumpUntilFound(tester, find.byKey(const Key('homeDashboardList')));
+
+    expect(find.text('Commuter'), findsWidgets);
+    expect(find.text('64,000 mi'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('central action opens Daily Records actions', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final services = createTestServices();
     await tester.runAsync(() async {
       await services.vehicleService.addVehicle(_draft('Commuter', 64000));
@@ -114,7 +470,9 @@ void main() {
     expect(find.byKey(const Key('actionExpenseTile')), findsOneWidget);
     expect(find.byKey(const Key('actionIncomeTile')), findsOneWidget);
     expect(find.byKey(const Key('actionServiceTile')), findsOneWidget);
+    expect(find.byKey(const Key('actionOdometerTile')), findsOneWidget);
     expect(find.text('Odometer'), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Maintenance items can be created, edited and archived', (
@@ -226,20 +584,28 @@ void main() {
       tester,
       find.byKey(const Key('confirmArchiveMaintenanceItemButton')),
     );
+    final archivedState = await _waitForMaintenanceArchive(
+      tester,
+      services,
+      vehicle.id,
+      item.id,
+    );
+    expect(archivedState.activeItems, isEmpty);
+    final savedArchivedItems = archivedState.allItems;
+    expect(savedArchivedItems, hasLength(1));
+    expect(savedArchivedItems.single.id, item.id);
+    expect(savedArchivedItems.single.name, 'Engine Oil Plus');
+    expect(savedArchivedItems.single.mileageInterval, 9000);
+    expect(savedArchivedItems.single.isArchived, isTrue);
+
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('maintenanceAddButton')),
+    );
     await _pumpUntilFound(
       tester,
       find.text('No maintenance items have been added yet.'),
     );
-
-    final archivedItems = await tester.runAsync<List<MaintenanceItem>>(
-      () => services.maintenanceItems.listForVehicle(
-        vehicle.id,
-        includeArchived: true,
-      ),
-    );
-    final savedArchivedItems =
-        archivedItems ?? fail('Expected archived maintenance item.');
-    expect(savedArchivedItems.single.isArchived, isTrue);
   });
 
   testWidgets('Add Service saves multiple items and opens from History', (
@@ -831,9 +1197,13 @@ void main() {
 Future<DriveTrackerController> _pumpApp(
   WidgetTester tester,
   TestServices services,
-  Finder readyFinder,
-) async {
-  final controller = DriveTrackerController(database: services.database);
+  Finder readyFinder, {
+  DateTime? now,
+}) async {
+  final controller = DriveTrackerController(
+    database: services.database,
+    clock: now == null ? null : () => now,
+  );
   await tester.runAsync(controller.initialize);
   await tester.pumpWidget(
     DriveTrackerApp(database: services.database, controller: controller),
@@ -930,6 +1300,62 @@ Future<void> _waitForServiceItemsLoaded(WidgetTester tester) async {
     findsOneWidget,
     reason: 'Expected the Service form maintenance-items query to finish.',
   );
+}
+
+Future<_MaintenanceArchiveState> _waitForMaintenanceArchive(
+  WidgetTester tester,
+  TestServices services,
+  String vehicleId,
+  String itemId,
+) async {
+  _MaintenanceArchiveState? lastState;
+  for (var index = 0; index < 50; index += 1) {
+    final state = await tester.runAsync<_MaintenanceArchiveState>(
+      () => _maintenanceArchiveState(services, vehicleId),
+    );
+    lastState = state;
+    if (state != null &&
+        state.activeItems.every((item) => item.id != itemId) &&
+        state.allItems.any((item) => item.id == itemId && item.isArchived)) {
+      return state;
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  final state = lastState ?? fail('Expected maintenance archive state.');
+  expect(
+    state.activeItems.where((item) => item.id == itemId),
+    isEmpty,
+    reason: 'Expected archived item to be excluded from active maintenance.',
+  );
+  expect(
+    state.allItems.where((item) => item.id == itemId && item.isArchived),
+    isNotEmpty,
+    reason: 'Expected archived item to remain in maintenance storage.',
+  );
+  return state;
+}
+
+Future<_MaintenanceArchiveState> _maintenanceArchiveState(
+  TestServices services,
+  String vehicleId,
+) async {
+  final activeItems = await services.maintenanceItems.listForVehicle(vehicleId);
+  final allItems = await services.maintenanceItems.listForVehicle(
+    vehicleId,
+    includeArchived: true,
+  );
+  return _MaintenanceArchiveState(activeItems: activeItems, allItems: allItems);
+}
+
+class _MaintenanceArchiveState {
+  const _MaintenanceArchiveState({
+    required this.activeItems,
+    required this.allItems,
+  });
+
+  final List<MaintenanceItem> activeItems;
+  final List<MaintenanceItem> allItems;
 }
 
 Future<void> _selectDropdownItem(
@@ -1078,6 +1504,13 @@ Future<List<String>> _categoryNames(
       .toList();
 }
 
+Future<RecordCategory> _firstCategory(
+  TestServices services,
+  RecordCategoryType type,
+) async {
+  return (await services.categories.listByType(type)).first;
+}
+
 VehicleDraft _draft(String name, int odometer) {
   return VehicleDraft(
     name: name,
@@ -1086,5 +1519,26 @@ VehicleDraft _draft(String name, int odometer) {
     currentOdometer: odometer,
     fuelType: FuelType.petrol,
     distanceUnit: DistanceUnit.miles,
+  );
+}
+
+RefuelDraft _refuelDraft(
+  String vehicleId, {
+  required DateTime eventDateTime,
+  required int odometer,
+  int totalCostMinor = 5000,
+  int volumeMillilitres = 40000,
+  int unitPriceMicrosPerLitre = 1250000,
+}) {
+  return RefuelDraft(
+    vehicleId: vehicleId,
+    eventDateTime: eventDateTime,
+    odometer: odometer,
+    fuelType: FuelType.petrol,
+    totalCostMinor: totalCostMinor,
+    volumeMillilitres: volumeMillilitres,
+    unitPriceMicrosPerLitre: unitPriceMicrosPerLitre,
+    isFullTank: true,
+    missedPreviousRefuel: false,
   );
 }
