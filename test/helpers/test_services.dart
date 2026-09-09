@@ -14,6 +14,7 @@ import 'package:drivetracker/features/daily_records/domain/expense_service.dart'
 import 'package:drivetracker/features/daily_records/domain/income_service.dart';
 import 'package:drivetracker/features/daily_records/domain/refuel_service.dart';
 import 'package:drivetracker/features/home/data/home_repository.dart';
+import 'package:drivetracker/features/insights/data/insights_repository.dart';
 import 'package:drivetracker/features/maintenance/data/maintenance_item_repository.dart';
 import 'package:drivetracker/features/maintenance/data/service_record_repository.dart';
 import 'package:drivetracker/features/maintenance/domain/maintenance_item_service.dart';
@@ -37,6 +38,7 @@ class TestServices {
       expenses = ExpenseRepository(database),
       incomes = IncomeRepository(database),
       activities = ActivityRepository(database),
+      insights = InsightsRepository(database),
       maintenanceItems = MaintenanceItemRepository(database),
       serviceRecords = ServiceRecordRepository(database) {
     final idGenerator = IdGenerator(random: Random(42));
@@ -138,6 +140,7 @@ class TestServices {
   final ExpenseRepository expenses;
   final IncomeRepository incomes;
   final ActivityRepository activities;
+  final InsightsRepository insights;
   final MaintenanceItemRepository maintenanceItems;
   final ServiceRecordRepository serviceRecords;
   late final VehicleService vehicleService;

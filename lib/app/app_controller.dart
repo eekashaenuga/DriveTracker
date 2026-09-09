@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/calculations/analytics_date_range.dart';
 import '../core/database/app_database.dart';
 import '../core/utilities/validation_exception.dart';
 import '../features/daily_records/data/activity_repository.dart';
@@ -13,6 +14,7 @@ import '../features/daily_records/domain/daily_activity.dart';
 import '../features/daily_records/domain/expense.dart';
 import '../features/daily_records/domain/expense_service.dart';
 import '../features/daily_records/domain/fuel_economy_calculator.dart';
+import '../features/daily_records/domain/history_filter.dart';
 import '../features/daily_records/domain/income.dart';
 import '../features/daily_records/domain/income_service.dart';
 import '../features/daily_records/domain/monthly_spending.dart';
@@ -21,6 +23,8 @@ import '../features/daily_records/domain/refuel.dart';
 import '../features/daily_records/domain/refuel_service.dart';
 import '../features/home/data/home_repository.dart';
 import '../features/home/domain/vehicle_dashboard.dart';
+import '../features/insights/data/insights_repository.dart';
+import '../features/insights/domain/vehicle_insights.dart';
 import '../features/maintenance/data/maintenance_item_repository.dart';
 import '../features/maintenance/data/service_record_repository.dart';
 import '../features/maintenance/domain/maintenance_item.dart';
@@ -52,6 +56,7 @@ class DriveTrackerController extends ChangeNotifier {
        _expenseRepository = ExpenseRepository(database),
        _incomeRepository = IncomeRepository(database),
        _activityRepository = ActivityRepository(database),
+       _insightsRepository = InsightsRepository(database),
        _maintenanceItemRepository = MaintenanceItemRepository(database),
        _serviceRecordRepository = ServiceRecordRepository(database) {
     final financialSummaryRepository = FinancialSummaryRepository(
@@ -127,6 +132,7 @@ class DriveTrackerController extends ChangeNotifier {
   final ExpenseRepository _expenseRepository;
   final IncomeRepository _incomeRepository;
   final ActivityRepository _activityRepository;
+  final InsightsRepository _insightsRepository;
   final MaintenanceItemRepository _maintenanceItemRepository;
   final ServiceRecordRepository _serviceRecordRepository;
   late final HomeRepository _homeRepository;
@@ -207,6 +213,21 @@ class DriveTrackerController extends ChangeNotifier {
       vehicle.id,
       type: type,
       limit: 100,
+    );
+  }
+
+  Future<List<DailyActivity>> history(HistoryFilter filter) {
+    return _activityRepository.search(filter, now: _clock());
+  }
+
+  Future<VehicleInsights> insightsFor({
+    required String? vehicleId,
+    required AnalyticsDateRange range,
+  }) {
+    return _insightsRepository.loadInsights(
+      vehicleId: vehicleId,
+      range: range,
+      now: _clock(),
     );
   }
 

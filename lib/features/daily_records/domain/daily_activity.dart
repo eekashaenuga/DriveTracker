@@ -1,3 +1,5 @@
+import '../../vehicles/domain/vehicle.dart';
+
 enum DailyActivityType {
   all('All'),
   refuel('Fuel'),
@@ -22,6 +24,11 @@ class DailyActivity {
     required this.subtitle,
     this.amountMinor,
     this.odometer,
+    this.vehicleName,
+    this.vehicleDescription,
+    this.vehicleDistanceUnit,
+    this.categoryId,
+    this.categoryName,
   });
 
   final DailyActivityType type;
@@ -33,4 +40,9 @@ class DailyActivity {
   final String subtitle;
   final int? amountMinor;
   final int? odometer;
+  final String? vehicleName;
+  final String? vehicleDescription;
+  final DistanceUnit? vehicleDistanceUnit;
+  final String? categoryId;
+  final String? categoryName;
 }
