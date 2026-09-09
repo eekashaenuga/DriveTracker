@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/daily_records/domain/expense.dart';
+import '../../features/daily_records/domain/history_filter.dart';
 import '../../features/daily_records/domain/income.dart';
 import '../../features/daily_records/domain/refuel.dart';
 import '../../features/daily_records/presentation/expense_form_screen.dart';
@@ -135,9 +136,15 @@ class AppNavigation {
     );
   }
 
-  static Future<void> openHistory(BuildContext context) {
-    return Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => const HistoryScreen()));
+  static Future<void> openHistory(
+    BuildContext context, {
+    HistoryFilter? filter,
+  }) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HistoryScreen(initialFilter: filter),
+      ),
+    );
   }
 
   static Future<void> openSettings(BuildContext context) {

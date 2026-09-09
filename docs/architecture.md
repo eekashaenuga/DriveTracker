@@ -2,7 +2,7 @@
 
 ## Foundation
 
-DriveTracker is structured around small feature modules. UI screens depend on `DriveTrackerController`, which coordinates repositories and services. Repositories centralize SQLite access. Services own cross-table behavior and domain rules.
+DriveTracker is structured around small feature modules. UI screens depend on `DriveTrackerController`, which coordinates repositories and services. Repositories centralize SQLite access. Services own cross-table behavior and domain rules. Derived analytics live in repository/domain code and are passed to widgets as prepared models.
 
 The app intentionally avoids a heavy architecture framework for Milestone 1. `provider` and `ChangeNotifier` are enough for predictable state updates across add/edit/archive/select/update flows.
 
@@ -56,6 +56,8 @@ Tables:
   - Optional allocated item cost and notes are metadata. Allocations do not add to spending totals.
 
 Foreign keys are enabled on database open. Indexes support active vehicle filtering, per-vehicle odometer lookup, source-record odometer linkage, category type lookup, vehicle/date record lists, active maintenance lookup, service history, completion lookup, and month spend queries.
+
+Milestone 5 keeps schema version 3. History filters and Insights are derived from existing source tables and do not persist cached analytics snapshots.
 
 ## Migrations
 
@@ -160,6 +162,104 @@ Income is not included in spending. Refuels do not generate standalone expense r
 Month spending uses `event_datetime` and the user's local calendar month, not `created_at`.
 
 Six-month spending trends are fixed local-calendar month buckets ending with the current month. Empty months remain present with zero spend so Home can render a truthful trend without inventing values.
+
+## History Filtering
+
+`HistoryFilter` is the typed filter contract for the unified History screen and Insights drill-down. It supports:
+
+- selected vehicle or all active vehicles
+- all/fuel/service/expense/income/odometer record type
+- all, week, month, year, or custom local-calendar date range
+- expense/income category
+- text search across stored user-facing text
+
+`ActivityRepository.search` owns the filtering. It queries the source record tables directly, joins category and vehicle metadata where needed, and sorts the unified results by `event_datetime DESC, created_at DESC`. Linked odometer rows from refuels, expenses, income, and services are represented by their owning record, so History does not duplicate financial activity. Manual odometer rows remain visible and open a read-only detail dialog because they do not yet have a separate edit form.
+
+History date filters and Insights ranges share `AnalyticsDateRange`. Ranges use local calendar boundaries and SQL receives UTC ISO strings for the end-exclusive stored comparison. Custom ranges validate `start <= end` and convert the inclusive end day to an end-exclusive boundary.
+
+## Insights Architecture
+
+`InsightsRepository` prepares one `VehicleInsights` model for a vehicle or all active vehicles and a resolved range. Widgets receive totals, availability reasons, chart buckets, breakdown rows, and trend points; they do not query SQLite or duplicate calculation rules.
+
+The summary model exposes:
+
+- fuel spend from `refuels.total_cost_minor`
+- service spend from non-baseline `services.total_cost_minor`
+- standalone expense spend from `expenses.amount_minor`
+- total expenditure as fuel + service + standalone expense
+- income from `income_records.amount_minor`
+- net as income - total expenditure
+- running spend and cost-per-distance when safely available
+- weighted fuel price
+- aggregate valid full-to-full fuel economy
+- spending, income, fuel price, fuel economy, and odometer trend data
+- source period/type/category metadata for drill-down to History
+
+### Distance Algorithm
+
+Distance is calculated only for a single selected vehicle. All Vehicles never combines odometers.
+
+For one vehicle:
+
+1. Read every odometer entry for the vehicle ordered by `event_datetime ASC, created_at ASC`.
+2. Build a valid chronological sequence by keeping readings that are greater than or equal to the highest accepted reading so far. A later lower reading is treated as historical/inconsistent for distance purposes and ignored, while an older lower reading with an older event date remains valid.
+3. Choose the start reading as the last valid reading at or before the range start. If there is no such boundary reading, use the first valid reading inside the range.
+4. Choose the end reading as the last valid reading before the end-exclusive range boundary, or the latest valid reading for all-time ranges.
+5. If fewer than two distinct valid readings are available, distance is unavailable. If the odometer delta is zero across two readings, zero distance is returned truthfully, and per-distance cost metrics remain unavailable to avoid divide-by-zero.
+
+### Fuel Economy Algorithm
+
+Fuel economy reuses `FuelEconomyCalculator.validIntervals`:
+
+- a full tank starts a boundary
+- partial fills between boundaries accumulate
+- the ending full tank litres are included
+- missed-refuel flags invalidate the affected interval and allow a new sequence to resume once the tank state is trustworthy
+- non-progressing odometers and unsupported units produce no interval
+
+For an Insights range, valid intervals whose ending full refuel event is inside the range are aggregated. MPG is calculated from total valid distance divided by total valid litres converted to imperial gallons. Individual MPG values are not averaged.
+
+### Weighted Fuel Price
+
+Average fuel price is volume-weighted for refuels in the selected range:
+
+`total fuel cost / total fuel volume`
+
+The repository calculates this from `total_cost_minor` and `volume_millilitres`, returning micros per litre so existing fuel-price formatters can display pence per litre.
+
+### Running Versus Total Cost
+
+Total expenditure includes all refuel spend, non-baseline service spend, and standalone expense spend.
+
+Running/usage-oriented spend includes:
+
+- all refuel spend
+- all non-baseline service spend
+- seeded expense categories for parking, tolls, repairs, parts, cleaning, and other
+
+Insurance, tax, MOT, fines, subscriptions, and custom expense categories are included in total expenditure but not assumed to be running cost because the current schema cannot reliably infer their usage relationship from a custom display name.
+
+### Chart Bucketing
+
+`AnalyticsDateRange` creates local-calendar buckets:
+
+- Week: daily buckets
+- Month: weekly buckets
+- Year: monthly buckets
+- All: monthly buckets for shorter spans, yearly buckets for longer spans
+- Custom: daily, weekly, monthly, or yearly buckets according to duration
+
+Bounded ranges retain empty buckets so charts show truthful time context. All-time ranges use the real earliest and latest financial events; if there are no source events, no chart points are fabricated.
+
+## All Vehicles Insights
+
+All Vehicles safely aggregates expenditure, income, net, spending buckets, category breakdown, and weighted fuel price across active vehicles. It deliberately marks distance, fuel economy, odometer trend, running cost per distance, and total expenditure per distance unavailable because odometers and MPG intervals are vehicle-specific and cannot be combined without misleading the user.
+
+## Insights Presentation
+
+The Insights screen is a real dashboard with vehicle scope, week/month/year/all/custom ranges, summary metrics, an interactive spending chart, spending breakdown, fuel insight section, mileage section, and optional income/net section. Tapping spending buckets, category breakdown selections, or fuel drill-down opens History with a concrete `HistoryFilter` for the matching period/type/category instead of using global mutable state.
+
+The screen avoids large subtree animations and whole-screen transitions. It uses ordinary Material ink interactions, finite-width controls, horizontal chart scrolling for dense buckets, semantic labels for tappable chart data, and unavailable states when the data is insufficient.
 
 ## Home Dashboard
 

@@ -17,14 +17,15 @@ class DriveTrackerShell extends StatefulWidget {
 
 class _DriveTrackerShellState extends State<DriveTrackerShell> {
   int _index = 0;
+  final Set<int> _visitedTabs = {0};
 
   @override
   Widget build(BuildContext context) {
     final screens = <Widget>[
-      const HomeScreen(),
-      const InsightsScreen(),
-      const RemindersScreen(),
-      const MoreScreen(),
+      _tab(0, const HomeScreen()),
+      _tab(1, const InsightsScreen()),
+      _tab(2, const RemindersScreen()),
+      _tab(3, const MoreScreen()),
     ];
 
     return Scaffold(
@@ -42,26 +43,26 @@ class _DriveTrackerShellState extends State<DriveTrackerShell> {
               icon: Icons.home_rounded,
               label: 'Home',
               selected: _index == 0,
-              onTap: () => setState(() => _index = 0),
+              onTap: () => _selectTab(0),
             ),
             _NavItem(
               icon: Icons.insights_rounded,
               label: 'Insights',
               selected: _index == 1,
-              onTap: () => setState(() => _index = 1),
+              onTap: () => _selectTab(1),
             ),
             const SizedBox(width: 68),
             _NavItem(
               icon: Icons.notifications_none_rounded,
               label: 'Reminders',
               selected: _index == 2,
-              onTap: () => setState(() => _index = 2),
+              onTap: () => _selectTab(2),
             ),
             _NavItem(
               icon: Icons.more_horiz_rounded,
               label: 'More',
               selected: _index == 3,
-              onTap: () => setState(() => _index = 3),
+              onTap: () => _selectTab(3),
             ),
           ],
         ),
@@ -74,6 +75,20 @@ class _DriveTrackerShellState extends State<DriveTrackerShell> {
       context: context,
       builder: (sheetContext) => _ActionSheet(parentContext: context),
     );
+  }
+
+  Widget _tab(int index, Widget child) {
+    if (!_visitedTabs.contains(index)) {
+      return const SizedBox.shrink();
+    }
+    return child;
+  }
+
+  void _selectTab(int index) {
+    setState(() {
+      _index = index;
+      _visitedTabs.add(index);
+    });
   }
 }
 

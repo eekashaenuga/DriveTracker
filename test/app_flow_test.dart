@@ -727,7 +727,10 @@ void main() {
         matching: find.text('Service'),
       ),
     );
-    await _pumpUntilGone(tester, find.text('Odometer'));
+    await _pumpUntilGone(
+      tester,
+      _historyActivityRowsForType(DailyActivityType.odometer),
+    );
     await _pumpUntilFound(tester, serviceRow);
     expect(
       find.descendant(of: serviceRow, matching: find.text('Service')),
@@ -745,6 +748,7 @@ void main() {
       findsOneWidget,
     );
 
+    await _scrollUntilFound(tester, serviceRow);
     await _tapAndPump(tester, serviceRow);
     await _pumpUntilFound(tester, find.byKey(const Key('deleteServiceButton')));
     await _waitForServiceItemsLoaded(tester);
@@ -971,6 +975,482 @@ void main() {
 
     expect(find.text('£12.00'), findsWidgets);
     expect(find.text('£45.00'), findsWidgets);
+  });
+
+  testWidgets(
+    'Insights renders real data and drills down to filtered History',
+    (tester) async {
+      final services = createTestServices();
+      final now = DateTime.utc(2026, 9, 20, 12);
+      late Vehicle vehicle;
+      late String expenseId;
+      await tester.runAsync(() async {
+        final parking = await _categoryById(services, 'cat_expense_parking');
+        final incomeCategory = await _categoryById(
+          services,
+          'cat_income_rideshare',
+        );
+        vehicle = await services.vehicleService.addVehicle(
+          _draft('Commuter', 64000),
+        );
+        await services.refuelService.createRefuel(
+          _refuelDraft(
+            vehicle.id,
+            eventDateTime: DateTime.utc(2026, 9, 4, 8),
+            odometer: 64100,
+            totalCostMinor: 5000,
+            volumeMillilitres: 40000,
+            unitPriceMicrosPerLitre: 1250000,
+          ),
+        );
+        final expense = await services.expenseService.createExpense(
+          ExpenseDraft(
+            vehicleId: vehicle.id,
+            categoryId: parking.id,
+            eventDateTime: DateTime.utc(2026, 9, 5, 8),
+            amountMinor: 1200,
+            merchant: 'Station Car Park',
+            notes: 'airport run',
+          ),
+        );
+        expenseId = expense.id;
+        await services.incomeService.createIncome(
+          IncomeDraft(
+            vehicleId: vehicle.id,
+            categoryId: incomeCategory.id,
+            eventDateTime: DateTime.utc(2026, 9, 6, 8),
+            amountMinor: 4500,
+            source: 'Mileage reclaim',
+          ),
+        );
+        await services.serviceRecordService.createServiceRecord(
+          ServiceRecordDraft(
+            vehicleId: vehicle.id,
+            eventDateTime: DateTime.utc(2026, 9, 7, 8),
+            odometer: 64600,
+            totalCostMinor: 9000,
+            garage: 'ABC Garage',
+            items: const [ServiceItemDraft(itemName: 'Inspection')],
+          ),
+        );
+      });
+
+      await _pumpApp(
+        tester,
+        services,
+        find.byKey(const Key('mainActionButton')),
+        now: now,
+      );
+      await _tapAndPump(tester, find.text('Insights').last);
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('insightsScreenList')),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('insightsTotalSpendMetric')),
+          matching: find.text('£152.00'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('insightsDistanceMetric')),
+          matching: find.text('600 mi'),
+        ),
+        findsOneWidget,
+      );
+      await _scrollUntilFound(
+        tester,
+        find.byKey(const Key('insightsSpendingChart')),
+      );
+
+      await _tapAndPump(
+        tester,
+        find.byKey(const Key('insightsSpendingBucket_0')),
+      );
+      expect(
+        find.byKey(const Key('insightsSelectedSpendingBucket')),
+        findsOneWidget,
+      );
+
+      await _scrollUntilFound(
+        tester,
+        find.byKey(const Key('insightsBreakdown_cat_expense_parking')),
+      );
+      await _tapAndPump(
+        tester,
+        find.byKey(const Key('insightsBreakdown_cat_expense_parking')),
+      );
+      await _pumpUntilFound(tester, find.textContaining('Parking · £12.00'));
+      await _tapAndPump(
+        tester,
+        find.byKey(const Key('insightsBreakdownDrilldownButton')),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.byKey(Key('historyActivity_expense_$expenseId')),
+      );
+
+      expect(find.text('History'), findsWidgets);
+      expect(find.text('Parking'), findsWidgets);
+      expect(find.textContaining('Station Car Park / Expense'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('Insights handles all vehicles and custom range controls', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final services = createTestServices();
+    final now = DateTime.utc(2026, 9, 20, 12);
+    await tester.runAsync(() async {
+      final category = await _categoryById(services, 'cat_expense_parking');
+      final commuter = await services.vehicleService.addVehicle(
+        _draft('Commuter', 1000),
+      );
+      final weekend = await services.vehicleService.addVehicle(
+        _draft('Weekend', 5000),
+      );
+      await services.refuelService.createRefuel(
+        _refuelDraft(
+          commuter.id,
+          eventDateTime: DateTime.utc(2026, 9, 4, 8),
+          odometer: 1100,
+          totalCostMinor: 5000,
+        ),
+      );
+      await services.expenseService.createExpense(
+        ExpenseDraft(
+          vehicleId: weekend.id,
+          categoryId: category.id,
+          eventDateTime: DateTime.utc(2026, 9, 5, 8),
+          amountMinor: 2000,
+        ),
+      );
+    });
+
+    final controller = await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('mainActionButton')),
+      now: now,
+    );
+    await tester.runAsync(() => controller.setThemeMode(ThemeMode.dark));
+    await tester.pump();
+    await _tapAndPump(tester, find.text('Insights').last);
+    await _pumpUntilFound(tester, find.byKey(const Key('insightsScreenList')));
+
+    await _selectDropdownItem(
+      tester,
+      field: find.byKey(const Key('insightsVehicleSelector')),
+      label: 'All vehicles',
+    );
+    await _pumpUntilFound(
+      tester,
+      find.text('Select one vehicle for distance-based metrics.'),
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('insightsTotalSpendMetric')),
+        matching: find.text('£70.00'),
+      ),
+      findsOneWidget,
+    );
+
+    await _tapInsightsCustomRangeButton(tester);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('insightsCustomRangePicker')),
+    );
+    await _selectDatePickerRange(tester, startDay: 4, endDay: 4);
+    await _pumpUntilFound(tester, find.text('4 Sep 2026'));
+    await _pumpUntilFound(
+      tester,
+      find.descendant(
+        of: find.byKey(const Key('insightsTotalSpendMetric')),
+        matching: find.text('£50.00'),
+      ),
+    );
+
+    await _tapInsightsCustomRangeButton(tester);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('insightsCustomRangePicker')),
+    );
+    await _tapDatePickerDay(tester, 5);
+    await _closeDateRangePicker(tester);
+    await _pumpUntilGone(
+      tester,
+      find.byKey(const Key('insightsCustomRangePicker')),
+    );
+    expect(find.text('4 Sep 2026'), findsOneWidget);
+    await _pumpUntilFound(tester, find.byKey(const Key('insightsScreenList')));
+
+    await _tapInsightsCustomRangeButton(tester);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('insightsCustomRangePicker')),
+    );
+    await _tapDatePickerTextAction(tester, 'Apply');
+    await _pumpUntilGone(
+      tester,
+      find.byKey(const Key('insightsCustomRangePicker')),
+    );
+    expect(find.text('4 Sep 2026'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Insights visual charts are compact and selectable', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 780));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final services = createTestServices();
+    final now = DateTime.utc(2026, 9, 20, 12);
+    await tester.runAsync(() async {
+      final parking = await _categoryById(services, 'cat_expense_parking');
+      final incomeCategory = await _categoryById(
+        services,
+        'cat_income_rideshare',
+      );
+      final vehicle = await services.vehicleService.addVehicle(
+        _draft('Long Distance Commuter Vehicle', 64000),
+      );
+      await services.refuelService.createRefuel(
+        _refuelDraft(
+          vehicle.id,
+          eventDateTime: DateTime.utc(2026, 9, 1, 8),
+          odometer: 65000,
+          totalCostMinor: 5000,
+          volumeMillilitres: 40000,
+          unitPriceMicrosPerLitre: 1250000,
+        ),
+      );
+      await services.refuelService.createRefuel(
+        _refuelDraft(
+          vehicle.id,
+          eventDateTime: DateTime.utc(2026, 9, 5, 8),
+          odometer: 65200,
+          totalCostMinor: 3200,
+          volumeMillilitres: 20000,
+          unitPriceMicrosPerLitre: 1600000,
+        ),
+      );
+      await services.refuelService.createRefuel(
+        _refuelDraft(
+          vehicle.id,
+          eventDateTime: DateTime.utc(2026, 9, 12, 8),
+          odometer: 65500,
+          totalCostMinor: 5400,
+          volumeMillilitres: 45000,
+          unitPriceMicrosPerLitre: 1200000,
+        ),
+      );
+      await services.expenseService.createExpense(
+        ExpenseDraft(
+          vehicleId: vehicle.id,
+          categoryId: parking.id,
+          eventDateTime: DateTime.utc(2026, 9, 3, 8),
+          amountMinor: 123456789,
+          merchant: 'Airport Long Stay',
+        ),
+      );
+      await services.incomeService.createIncome(
+        IncomeDraft(
+          vehicleId: vehicle.id,
+          categoryId: incomeCategory.id,
+          eventDateTime: DateTime.utc(2026, 9, 18, 8),
+          amountMinor: 9876543,
+          source: 'Mileage reclaim',
+        ),
+      );
+    });
+
+    final controller = await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('mainActionButton')),
+      now: now,
+    );
+    await tester.runAsync(() => controller.setThemeMode(ThemeMode.dark));
+    await tester.pump();
+    await _tapAndPump(tester, find.text('Insights').last);
+    await _pumpUntilFound(tester, find.byKey(const Key('insightsScreenList')));
+
+    expect(find.byKey(const Key('insightsTotalSpendMetric')), findsOneWidget);
+    expect(find.byKey(const Key('insightsDistanceMetric')), findsOneWidget);
+    expect(find.byKey(const Key('insightsFuelEconomyMetric')), findsOneWidget);
+    expect(
+      find.byKey(const Key('insightsCostPerDistanceMetric')),
+      findsOneWidget,
+    );
+
+    await _scrollUntilFound(
+      tester,
+      find.byKey(const Key('insightsSpendingChart')),
+    );
+    final zeroBar = tester.widget<SizedBox>(
+      find.byKey(const Key('insightsSpendingBucketBar_2')),
+    );
+    expect(zeroBar.height, 0);
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('insightsSpendingBucket_2')),
+    );
+    expect(
+      find.byKey(const Key('insightsSelectedSpendingBucket')),
+      findsOneWidget,
+    );
+
+    await _scrollUntilFound(
+      tester,
+      find.byKey(const Key('insightsFuelEconomyChart')),
+    );
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('insightsFuelEconomyPoint_0')),
+    );
+    expect(
+      find.byKey(const Key('insightsSelectedFuelEconomyPoint')),
+      findsOneWidget,
+    );
+
+    await _scrollUntilFound(
+      tester,
+      find.byKey(const Key('insightsFuelPriceChart')),
+    );
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('insightsFuelPricePoint_0')),
+    );
+    expect(
+      find.byKey(const Key('insightsSelectedFuelPricePoint')),
+      findsOneWidget,
+    );
+
+    await _scrollUntilFound(
+      tester,
+      find.byKey(const Key('insightsMileagePanel')),
+    );
+    await _tapAndPump(tester, find.byKey(const Key('insightsMileagePoint_0')));
+    expect(
+      find.byKey(const Key('insightsSelectedMileagePoint')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('History filters by type date category search and reset', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    final now = DateTime.utc(2026, 9, 20, 12);
+    late String refuelId;
+    late String expenseId;
+    late String augustExpenseId;
+    await tester.runAsync(() async {
+      final parking = await _categoryById(services, 'cat_expense_parking');
+      final insurance = await _categoryById(services, 'cat_expense_insurance');
+      final vehicle = await services.vehicleService.addVehicle(
+        _draft('Commuter', 64000),
+      );
+      final refuel = await services.refuelService.createRefuel(
+        _refuelDraft(
+          vehicle.id,
+          eventDateTime: DateTime.utc(2026, 9, 4, 8),
+          odometer: 64100,
+        ),
+      );
+      refuelId = refuel.id;
+      final expense = await services.expenseService.createExpense(
+        ExpenseDraft(
+          vehicleId: vehicle.id,
+          categoryId: parking.id,
+          eventDateTime: DateTime.utc(2026, 9, 5, 8),
+          amountMinor: 1200,
+          merchant: 'Station Car Park',
+          notes: 'airport run',
+        ),
+      );
+      expenseId = expense.id;
+      final augustExpense = await services.expenseService.createExpense(
+        ExpenseDraft(
+          vehicleId: vehicle.id,
+          categoryId: insurance.id,
+          eventDateTime: DateTime.utc(2026, 8, 5, 8),
+          amountMinor: 30000,
+          merchant: 'Policy Co',
+        ),
+      );
+      augustExpenseId = augustExpense.id;
+    });
+
+    await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('mainActionButton')),
+      now: now,
+    );
+    await _openHistoryScreen(tester);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('historyActivity_refuel_$refuelId')),
+    );
+
+    await _tapAndPump(
+      tester,
+      find.descendant(
+        of: find.byKey(const Key('historyFilterField')),
+        matching: find.text('Expense'),
+      ),
+    );
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('historyCustomRangeButton')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('historyCustomRangePicker')),
+    );
+    await _selectDatePickerRange(tester, startDay: 5, endDay: 5);
+    await _pumpUntilFound(tester, find.text('5 Sep 2026'));
+    await _selectDropdownItem(
+      tester,
+      field: find.byKey(const Key('historyCategoryFilterField')),
+      label: 'Parking',
+    );
+    await tester.enterText(
+      find.byKey(const Key('historySearchField')),
+      'airport',
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('historyActivity_expense_$expenseId')),
+    );
+    await _pumpUntilGone(
+      tester,
+      find.byKey(Key('historyActivity_refuel_$refuelId')),
+    );
+    expect(
+      find.byKey(Key('historyActivity_expense_$augustExpenseId')),
+      findsNothing,
+    );
+
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('historyResetFiltersButton')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('historyActivity_refuel_$refuelId')),
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Expense Add Category cancel keeps form usable', (tester) async {
@@ -1232,6 +1712,48 @@ Future<void> _tapAndPump(WidgetTester tester, Finder finder) async {
   await tester.pump(const Duration(milliseconds: 350));
 }
 
+Future<void> _selectDatePickerRange(
+  WidgetTester tester, {
+  required int startDay,
+  required int endDay,
+}) async {
+  await _tapDatePickerDay(tester, startDay);
+  await _tapDatePickerDay(tester, endDay);
+  await _tapDatePickerTextAction(tester, 'Apply');
+}
+
+Future<void> _tapInsightsCustomRangeButton(WidgetTester tester) async {
+  final customRangeButton = find.byKey(const Key('insightsCustomRangeButton'));
+  await _pumpUntilFound(tester, customRangeButton);
+  await tester.ensureVisible(customRangeButton);
+  await tester.pump();
+  await _tapAndPump(tester, customRangeButton);
+}
+
+Future<void> _tapDatePickerDay(WidgetTester tester, int day) async {
+  final dayFinder = find.text(day.toString()).hitTestable();
+  await _pumpUntilFound(tester, dayFinder);
+  await tester.tap(dayFinder.first);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
+Future<void> _tapDatePickerTextAction(WidgetTester tester, String label) async {
+  final action = find.text(label).hitTestable();
+  await _pumpUntilFound(tester, action);
+  await tester.tap(action.first);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+}
+
+Future<void> _closeDateRangePicker(WidgetTester tester) async {
+  final closeButton = find.byTooltip('Close').hitTestable();
+  await _pumpUntilFound(tester, closeButton);
+  await tester.tap(closeButton.first);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+}
+
 Future<void> _openActionSheet(WidgetTester tester) async {
   await _tapAndPump(tester, find.byKey(const Key('mainActionButton')));
   await _pumpUntilFound(tester, find.byKey(const Key('actionRefuelTile')));
@@ -1259,6 +1781,14 @@ Future<void> _openHistoryScreen(WidgetTester tester) async {
   await _pumpUntilFound(tester, find.text('History'));
   await _tapAndPump(tester, find.text('History').first);
   await _pumpUntilFound(tester, find.byKey(const Key('historyFilterField')));
+}
+
+Finder _historyActivityRowsForType(DailyActivityType type) {
+  return find.byWidgetPredicate((widget) {
+    final key = widget.key;
+    return key is ValueKey<String> &&
+        key.value.startsWith('historyActivity_${type.name}_');
+  });
 }
 
 Future<void> _selectServiceItem(
@@ -1509,6 +2039,11 @@ Future<RecordCategory> _firstCategory(
   RecordCategoryType type,
 ) async {
   return (await services.categories.listByType(type)).first;
+}
+
+Future<RecordCategory> _categoryById(TestServices services, String id) async {
+  final category = await services.categories.getById(id);
+  return category ?? fail('Expected seeded category $id.');
 }
 
 VehicleDraft _draft(String name, int odometer) {
