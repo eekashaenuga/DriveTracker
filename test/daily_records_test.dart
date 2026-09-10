@@ -57,7 +57,7 @@ void main() {
       addTearDown(database.close);
       final db = await database.database;
 
-      expect(await db.getVersion(), 3);
+      expect(await db.getVersion(), 4);
       expect((await db.query('vehicles')).single['id'], 'veh_1');
       expect((await db.query('odometer_entries')).single['id'], 'odo_1');
       expect((await db.query('app_settings')).single['value'], 'veh_1');
@@ -67,6 +67,8 @@ void main() {
       expect(await db.query('maintenance_items'), isEmpty);
       expect(await db.query('services'), isEmpty);
       expect(await db.query('service_items'), isEmpty);
+      expect(await db.query('documents'), isEmpty);
+      expect(await db.query('attachments'), isEmpty);
       expect(
         (await db.query(
           'record_categories',

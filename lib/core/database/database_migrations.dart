@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 class DatabaseMigrations {
   const DatabaseMigrations._();
 
-  static const schemaVersion = 3;
+  static const schemaVersion = 4;
 
   static Future<void> createSchema(
     sqflite.DatabaseExecutor db,
@@ -20,6 +20,9 @@ class DatabaseMigrations {
     if (version >= 3) {
       await _createV3(db);
     }
+    if (version >= 4) {
+      await _createV4(db);
+    }
   }
 
   static Future<void> migrate(
@@ -34,6 +37,9 @@ class DatabaseMigrations {
           break;
         case 3:
           await _createV3(db);
+          break;
+        case 4:
+          await _createV4(db);
           break;
         default:
           throw StateError(
@@ -353,6 +359,61 @@ class DatabaseMigrations {
     await db.execute('''
       CREATE INDEX idx_service_items_maintenance_item
       ON service_items (maintenance_item_id)
+    ''');
+  }
+
+  static Future<void> _createV4(sqflite.DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE documents (
+        id TEXT PRIMARY KEY,
+        vehicle_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        issue_date TEXT,
+        expiry_date TEXT,
+        reference_number TEXT,
+        provider TEXT,
+        notes TEXT,
+        reminder_id TEXT,
+        is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
+        archived_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+          ON UPDATE CASCADE
+          ON DELETE RESTRICT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE attachments (
+        id TEXT PRIMARY KEY,
+        parent_type TEXT NOT NULL CHECK (parent_type IN ('DOCUMENT', 'REFUEL', 'SERVICE', 'EXPENSE', 'INCOME', 'VEHICLE')),
+        parent_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        stored_path TEXT NOT NULL,
+        mime_type TEXT,
+        file_size INTEGER CHECK (file_size IS NULL OR file_size >= 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_documents_vehicle_active_expiry
+      ON documents (vehicle_id, is_archived, expiry_date)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_documents_vehicle_category
+      ON documents (vehicle_id, category COLLATE NOCASE)
+    ''');
+    await db.execute('''
+      CREATE INDEX idx_attachments_parent
+      ON attachments (parent_type, parent_id)
+    ''');
+    await db.execute('''
+      CREATE UNIQUE INDEX idx_attachments_stored_path
+      ON attachments (stored_path)
     ''');
   }
 }

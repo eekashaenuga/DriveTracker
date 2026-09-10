@@ -3,6 +3,8 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import '../../../core/database/app_database.dart';
 import '../../../core/utilities/id_generator.dart';
 import '../../../core/utilities/validation_exception.dart';
+import '../../attachments/domain/attachment.dart';
+import '../../attachments/domain/attachment_service.dart';
 import '../../odometer/data/odometer_repository.dart';
 import '../../odometer/domain/odometer_entry.dart';
 import '../../odometer/domain/odometer_policy.dart';
@@ -22,6 +24,7 @@ class IncomeService {
     required this.categoryRepository,
     required this.odometerRepository,
     required this.incomeRepository,
+    this.attachmentService,
     this.policy = const OdometerPolicy(),
     IdGenerator? idGenerator,
     Clock? clock,
@@ -33,6 +36,7 @@ class IncomeService {
   final CategoryRepository categoryRepository;
   final OdometerRepository odometerRepository;
   final IncomeRepository incomeRepository;
+  final AttachmentService? attachmentService;
   final OdometerPolicy policy;
   final IdGenerator _idGenerator;
   final Clock _clock;
@@ -119,6 +123,10 @@ class IncomeService {
       );
       await incomeRepository.delete(existing.id, executor: txn);
     });
+    await attachmentService?.removeAttachmentsForParent(
+      AttachmentParentType.income,
+      existing.id,
+    );
   }
 
   Future<void> _validateDraft(

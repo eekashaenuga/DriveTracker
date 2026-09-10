@@ -8,7 +8,7 @@ The app intentionally avoids a heavy architecture framework for Milestone 1. `pr
 
 ## Database
 
-Schema version: `3`
+Schema version: `4`
 
 Tables:
 
@@ -36,7 +36,7 @@ Tables:
   - Stable text `id` primary key and `vehicle_id` foreign key.
   - `event_datetime`, `created_at`, and `updated_at` remain distinct.
   - Required historical vehicle event fields: odometer, fuel type, total cost, volume, unit price, full/partial tank state, and missed-previous-refuel flag.
-  - Optional station and notes are stored as nullable text. Receipt attachments and driver fields are left for later milestones.
+  - Optional station and notes are stored as nullable text. Receipt attachments are linked through the shared `attachments` table.
 - `expenses`
   - Standalone vehicle expenses with vehicle, category, event time, amount, optional odometer, merchant, payment method, notes, and lifecycle timestamps.
   - Fuel is not seeded as a normal expense category because refuels contribute directly to spending.
@@ -54,14 +54,22 @@ Tables:
   - Line items within a service record.
   - Each row belongs to one service and may reference a tracked maintenance item. It also stores an item-name snapshot so service history remains meaningful if the tracked item is later archived or renamed.
   - Optional allocated item cost and notes are metadata. Allocations do not add to spending totals.
+- `documents`
+  - Vehicle-specific document records with stable text `id`, `vehicle_id`, category, title, optional issue date, optional expiry date, optional reference number, provider, notes, derived-reminder identifier space, archive metadata, and lifecycle timestamps.
+  - Dates are stored as local calendar date strings because document expiries are day-based records, not instants.
+  - `is_archived` separates current documents from historical records. Renewals create a new row and archive the old row so previous dates/references/attachments remain intact.
+- `attachments`
+  - Shared polymorphic attachment metadata for `DOCUMENT`, `REFUEL`, `SERVICE`, `EXPENSE`, `INCOME`, and reserved future `VEHICLE` parents.
+  - Stores stable text `id`, `parent_type`, `parent_id`, display `file_name`, portable relative `stored_path`, optional `mime_type`, optional `file_size`, and lifecycle timestamps.
+  - SQLite cannot enforce a polymorphic parent foreign key, so services validate parent existence and coordinate cleanup.
 
-Foreign keys are enabled on database open. Indexes support active vehicle filtering, per-vehicle odometer lookup, source-record odometer linkage, category type lookup, vehicle/date record lists, active maintenance lookup, service history, completion lookup, and month spend queries.
+Foreign keys are enabled on database open. Indexes support active vehicle filtering, per-vehicle odometer lookup, source-record odometer linkage, category type lookup, vehicle/date record lists, active maintenance lookup, service history, completion lookup, document expiry/category lists, attachment parent lookup, and month spend queries.
 
-Milestone 5 keeps schema version 3. History filters and Insights are derived from existing source tables and do not persist cached analytics snapshots.
+Milestone 6 advances schema version to 4 for documents and attachments. History filters and Insights remain derived from existing source tables and do not persist cached analytics snapshots.
 
 ## Migrations
 
-`DatabaseMigrations` owns schema creation and upgrades. The app opens SQLite with `schemaVersion = 3`. Fresh V3 databases create V1 tables first, then V2 daily-record additions, then V3 maintenance additions. Existing databases migrate through explicit V1 -> V2 and V2 -> V3 steps that preserve vehicles, archived vehicles, selected vehicle settings, odometer history, theme settings, refuels, expenses, income, and categories.
+`DatabaseMigrations` owns schema creation and upgrades. The app opens SQLite with `schemaVersion = 4`. Fresh V4 databases create V1 tables first, then V2 daily-record additions, V3 maintenance additions, and V4 document/attachment additions. Existing databases migrate through explicit V1 -> V2, V2 -> V3, and V3 -> V4 steps that preserve vehicles, archived vehicles, selected vehicle settings, odometer history, theme settings, refuels, expenses, income, categories, services, maintenance items, and service item history.
 
 Future changes should add explicit migration steps instead of dropping and recreating user tables.
 
@@ -80,6 +88,8 @@ The current odometer is derived from the highest valid reading for that vehicle:
 Event time, creation time, and update time are stored separately so refuel, service, and history features can handle historical records correctly.
 
 Refuels and normal services create or update one linked odometer entry with their source type and source record ID. Expenses and income create a linked odometer entry only when the user supplies an odometer value. Editing a record updates that linked entry rather than inserting duplicates. Deleting a transactional record removes only the odometer row owned by that source record.
+
+When a refuel, expense, income, or service record with attachments is deleted, its service calls the shared attachment cleanup path after the parent delete succeeds. Attachment metadata is deleted before managed files are removed.
 
 Manual odometer entries remain independent. Unified activity queries show manual odometer entries, but linked refuel/expense/income/service odometer rows are represented by their owning records to avoid duplicate activity.
 
@@ -150,6 +160,38 @@ Date boundaries:
 - `OVERDUE`: past due
 
 When both mileage and date intervals exist, both are evaluated and the more urgent state wins. No predicted future service dates are fabricated from mileage trends.
+
+Document expiry reminders follow the same derived-reminder architecture rather than introducing persisted reminder rows. `DocumentService.remindersForVehicle` evaluates active, unarchived documents with recorded expiry dates against the controller's current time and maps them to the existing reminder state vocabulary:
+
+- `UPCOMING`: expiry within 30 days
+- `DUE_SOON`: expiry within 7 days
+- `DUE`: expiry is today
+- `OVERDUE`: recorded expiry date has passed
+
+The Reminders screen renders document reminders beside maintenance reminders and opens the relevant document. Wording says "recorded expiry" or "expires in" and does not claim DriveTracker verified MOT, insurance, tax, ownership, or authenticity.
+
+## Documents
+
+`VehicleDocument` is the domain model for user-entered vehicle paperwork. Required fields are vehicle, category, title, and timestamps. Issue date, expiry date, reference number, provider, notes, and attachments are optional. Default UI categories include Insurance, MOT, V5C, Purchase receipt, Warranty, Breakdown cover, Tax, Finance / Lease, and Other, while the category text field keeps custom categories possible.
+
+Document status is calculated dynamically:
+
+- `NO_EXPIRY`: no expiry date recorded
+- `VALID`: an expiry date exists and is more than 30 days away
+- `EXPIRING_SOON`: expiry is today or within 30 days
+- `EXPIRED`: expiry date is before the current local calendar day
+
+Archiving hides a document from Current while keeping it in Archived / History and preserving attachments. Renewal archives the old document and creates a new active document from a user-edited draft. Old attachments stay with the historical document; they are not moved to the renewal. Permanent delete is behind confirmation and removes document attachment metadata and managed files.
+
+## Attachments
+
+Attachments are local-first and private. The database stores metadata only; file bytes are copied into app-controlled storage and are not stored as SQLite BLOBs. Persisted `stored_path` values are relative, for example `attachments/documents/<document-id>/<generated-id>.pdf`, so future backup/restore work can relocate files without rewriting absolute device paths.
+
+Supported M6 file types are PDF, JPG/JPEG, and PNG. `AttachmentService.maxAttachmentBytes` is 20 MB per file. The service validates parent existence, source readability, extension/MIME, non-empty size, maximum size, and safe display filenames before accepting a file. Internal storage names use generated IDs, not user filenames, preventing path traversal and ordinary filename collisions. Original filenames remain display metadata only.
+
+Adding an attachment copies the file first, verifies a managed path, then inserts metadata. If metadata insertion fails, the copied file is deleted where possible. Removing an attachment deletes metadata first and then performs best-effort managed-file cleanup. If a managed file is unexpectedly missing, the UI shows "File unavailable" and still allows metadata removal.
+
+Android file picking and opening are implemented through a small `drivetracker/attachments` method channel. The picker uses Android's open-document UI for PDFs and images, copies content into an internal temporary file for Dart validation, and the Dart service then copies it into managed storage. Opening delegates to an installed Android viewer through a `FileProvider` content URI. No cloud picker, sync, OCR, PDF renderer, or document verification is included.
 
 ## Financial Aggregation
 
@@ -273,4 +315,5 @@ Home maintenance attention only surfaces active reminder-enabled items that need
 - `sqflite_common_ffi` is used in tests and keeps the database layer compatible with future Windows work.
 - `provider` keeps app state lightweight and understandable for this milestone.
 - No routing package was added because the current navigation is small and imperative routes keep the dependency surface lower.
+- No Flutter picker/path/open-file packages were added for Milestone 6. Android-first file selection, managed-root discovery, and external opening use the existing Flutter method-channel capability plus a small Android implementation, keeping `pubspec.yaml` and `pubspec.lock` unchanged.
 - No analytics, telemetry, sync, account, or cloud packages are included.

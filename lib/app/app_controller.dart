@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../core/calculations/analytics_date_range.dart';
 import '../core/database/app_database.dart';
 import '../core/utilities/validation_exception.dart';
+import '../features/attachments/data/attachment_repository.dart';
+import '../features/attachments/domain/attachment.dart';
+import '../features/attachments/domain/attachment_io.dart';
+import '../features/attachments/domain/attachment_service.dart';
 import '../features/daily_records/data/activity_repository.dart';
 import '../features/daily_records/data/category_repository.dart';
 import '../features/daily_records/data/expense_repository.dart';
@@ -21,6 +25,9 @@ import '../features/daily_records/domain/monthly_spending.dart';
 import '../features/daily_records/domain/record_category.dart';
 import '../features/daily_records/domain/refuel.dart';
 import '../features/daily_records/domain/refuel_service.dart';
+import '../features/documents/data/document_repository.dart';
+import '../features/documents/domain/document_service.dart';
+import '../features/documents/domain/vehicle_document.dart';
 import '../features/home/data/home_repository.dart';
 import '../features/home/domain/vehicle_dashboard.dart';
 import '../features/insights/data/insights_repository.dart';
@@ -46,6 +53,9 @@ class DriveTrackerController extends ChangeNotifier {
   DriveTrackerController({
     required AppDatabase database,
     DateTime Function()? clock,
+    AttachmentStorage? attachmentStorage,
+    AttachmentPicker? attachmentPicker,
+    AttachmentOpener? attachmentOpener,
   }) : _database = database,
        _clock = clock ?? DateTime.now,
        _vehicleRepository = VehicleRepository(database),
@@ -58,7 +68,9 @@ class DriveTrackerController extends ChangeNotifier {
        _activityRepository = ActivityRepository(database),
        _insightsRepository = InsightsRepository(database),
        _maintenanceItemRepository = MaintenanceItemRepository(database),
-       _serviceRecordRepository = ServiceRecordRepository(database) {
+       _serviceRecordRepository = ServiceRecordRepository(database),
+       _attachmentRepository = AttachmentRepository(database),
+       _documentRepository = DocumentRepository(database) {
     final financialSummaryRepository = FinancialSummaryRepository(
       refuelRepository: _refuelRepository,
       expenseRepository: _expenseRepository,
@@ -84,11 +96,28 @@ class DriveTrackerController extends ChangeNotifier {
       odometerRepository: _odometerRepository,
     );
     _categoryService = CategoryService(categoryRepository: _categoryRepository);
+    _attachmentService = AttachmentService(
+      database: _database,
+      attachmentRepository: _attachmentRepository,
+      storage: attachmentStorage ?? ManagedAttachmentStorage(),
+      picker: attachmentPicker ?? const PlatformAttachmentPicker(),
+      opener: attachmentOpener ?? const PlatformAttachmentOpener(),
+      parentExists: _attachmentParentExists,
+    );
+    _documentService = DocumentService(
+      database: _database,
+      vehicleRepository: _vehicleRepository,
+      documentRepository: _documentRepository,
+      attachmentRepository: _attachmentRepository,
+      attachmentService: _attachmentService,
+      clock: () => _clock().toUtc(),
+    );
     _refuelService = RefuelService(
       database: _database,
       vehicleRepository: _vehicleRepository,
       odometerRepository: _odometerRepository,
       refuelRepository: _refuelRepository,
+      attachmentService: _attachmentService,
     );
     _expenseService = ExpenseService(
       database: _database,
@@ -96,6 +125,7 @@ class DriveTrackerController extends ChangeNotifier {
       categoryRepository: _categoryRepository,
       odometerRepository: _odometerRepository,
       expenseRepository: _expenseRepository,
+      attachmentService: _attachmentService,
     );
     _incomeService = IncomeService(
       database: _database,
@@ -103,6 +133,7 @@ class DriveTrackerController extends ChangeNotifier {
       categoryRepository: _categoryRepository,
       odometerRepository: _odometerRepository,
       incomeRepository: _incomeRepository,
+      attachmentService: _attachmentService,
     );
     _maintenanceItemService = MaintenanceItemService(
       vehicleRepository: _vehicleRepository,
@@ -115,6 +146,7 @@ class DriveTrackerController extends ChangeNotifier {
       maintenanceItemRepository: _maintenanceItemRepository,
       odometerRepository: _odometerRepository,
       serviceRecordRepository: _serviceRecordRepository,
+      attachmentService: _attachmentService,
     );
   }
 
@@ -135,10 +167,14 @@ class DriveTrackerController extends ChangeNotifier {
   final InsightsRepository _insightsRepository;
   final MaintenanceItemRepository _maintenanceItemRepository;
   final ServiceRecordRepository _serviceRecordRepository;
+  final AttachmentRepository _attachmentRepository;
+  final DocumentRepository _documentRepository;
   late final HomeRepository _homeRepository;
   late final VehicleService _vehicleService;
   late final OdometerService _odometerService;
   late final CategoryService _categoryService;
+  late final AttachmentService _attachmentService;
+  late final DocumentService _documentService;
   late final RefuelService _refuelService;
   late final ExpenseService _expenseService;
   late final IncomeService _incomeService;
@@ -242,6 +278,40 @@ class DriveTrackerController extends ChangeNotifier {
     return _serviceRecordRepository.getWithItems(id);
   }
 
+  Future<VehicleDocument?> documentById(String id) {
+    return _documentRepository.getById(id);
+  }
+
+  Future<List<VehicleDocument>> documentsForSelectedVehicle({
+    bool includeArchived = false,
+  }) {
+    final vehicle = selectedVehicle;
+    if (vehicle == null) {
+      return Future.value(const []);
+    }
+    return _documentRepository.listForVehicle(
+      vehicle.id,
+      includeArchived: includeArchived,
+    );
+  }
+
+  Future<List<VehicleDocument>> documentsForVehicle(
+    String vehicleId, {
+    bool includeArchived = false,
+  }) {
+    return _documentRepository.listForVehicle(
+      vehicleId,
+      includeArchived: includeArchived,
+    );
+  }
+
+  Future<List<Attachment>> attachmentsForParent(
+    AttachmentParentType parentType,
+    String parentId,
+  ) {
+    return _attachmentService.listForParent(parentType, parentId);
+  }
+
   Future<List<MaintenanceItem>> maintenanceItemsForSelectedVehicle({
     bool includeArchived = false,
   }) {
@@ -274,6 +344,14 @@ class DriveTrackerController extends ChangeNotifier {
       vehicle.id,
       currentOdometer: currentOdometer,
     );
+  }
+
+  Future<List<DocumentExpiryReminder>> documentRemindersForSelectedVehicle() {
+    final vehicle = selectedVehicle;
+    if (vehicle == null) {
+      return Future.value(const []);
+    }
+    return _documentService.remindersForVehicle(vehicle.id, asOf: _clock());
   }
 
   Future<MaintenanceReminder?> maintenanceReminderForItem(
@@ -603,6 +681,97 @@ class DriveTrackerController extends ChangeNotifier {
     });
   }
 
+  Future<VehicleDocument> addDocument(VehicleDocumentDraft draft) async {
+    return _runMutation(() async {
+      final document = await _documentService.createDocument(draft);
+      await _reloadData(preferredVehicleId: document.vehicleId);
+      return document;
+    });
+  }
+
+  Future<VehicleDocument> updateDocument(
+    String documentId,
+    VehicleDocumentDraft draft,
+  ) async {
+    return _runMutation(() async {
+      final document = await _documentService.updateDocument(documentId, draft);
+      await _reloadData(preferredVehicleId: document.vehicleId);
+      return document;
+    });
+  }
+
+  Future<void> archiveDocument(String documentId) async {
+    return _runMutation(() async {
+      final document = await _documentRepository.getById(documentId);
+      await _documentService.archiveDocument(documentId);
+      await _reloadData(preferredVehicleId: document?.vehicleId);
+    });
+  }
+
+  Future<VehicleDocument> renewDocument(
+    String documentId,
+    VehicleDocumentDraft draft,
+  ) async {
+    return _runMutation(() async {
+      final document = await _documentService.renewDocument(documentId, draft);
+      await _reloadData(preferredVehicleId: document.vehicleId);
+      return document;
+    });
+  }
+
+  Future<void> deleteDocumentPermanently(String documentId) async {
+    return _runMutation(() async {
+      final document = await _documentRepository.getById(documentId);
+      await _documentService.deleteDocumentPermanently(documentId);
+      await _reloadData(preferredVehicleId: document?.vehicleId);
+    });
+  }
+
+  Future<Attachment?> pickAndAttach({
+    required AttachmentParentType parentType,
+    required String parentId,
+  }) async {
+    return _runMutation(() async {
+      final attachment = await _attachmentService.pickAndAttach(
+        parentType: parentType,
+        parentId: parentId,
+      );
+      notifyListeners();
+      return attachment;
+    });
+  }
+
+  Future<Attachment> addAttachment({
+    required AttachmentParentType parentType,
+    required String parentId,
+    required AttachmentSource source,
+  }) async {
+    return _runMutation(() async {
+      final attachment = await _attachmentService.addAttachment(
+        parentType: parentType,
+        parentId: parentId,
+        source: source,
+      );
+      notifyListeners();
+      return attachment;
+    });
+  }
+
+  Future<void> removeAttachment(String attachmentId) async {
+    return _runMutation(() async {
+      await _attachmentService.removeAttachment(attachmentId);
+      notifyListeners();
+    });
+  }
+
+  Future<AttachmentOpenResult> openAttachment(Attachment attachment) {
+    return _attachmentService.openAttachment(attachment);
+  }
+
+  Future<bool> attachmentFileExists(Attachment attachment) {
+    return _attachmentService.attachmentFileExists(attachment);
+  }
+
   Future<void> setThemeMode(ThemeMode mode) async {
     return _runMutation(() async {
       _themeMode = mode;
@@ -687,5 +856,25 @@ class DriveTrackerController extends ChangeNotifier {
       case ThemeMode.system:
         return _themeSystem;
     }
+  }
+
+  Future<bool> _attachmentParentExists(
+    AttachmentParentType parentType,
+    String parentId,
+  ) async {
+    return switch (parentType) {
+      AttachmentParentType.document =>
+        await _documentRepository.getById(parentId) != null,
+      AttachmentParentType.refuel =>
+        await _refuelRepository.getById(parentId) != null,
+      AttachmentParentType.service =>
+        await _serviceRecordRepository.getById(parentId) != null,
+      AttachmentParentType.expense =>
+        await _expenseRepository.getById(parentId) != null,
+      AttachmentParentType.income =>
+        await _incomeRepository.getById(parentId) != null,
+      AttachmentParentType.vehicle =>
+        await _vehicleRepository.getById(parentId) != null,
+    };
   }
 }

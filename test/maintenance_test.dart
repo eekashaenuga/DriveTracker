@@ -18,60 +18,65 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'helpers/test_services.dart';
 
 void main() {
-  test('V2 to V3 migration preserves existing data and adds tables', () async {
-    sqfliteFfiInit();
-    final dir = await Directory.systemTemp.createTemp('drivetracker_v2_');
-    addTearDown(() async {
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
-    });
+  test(
+    'V2 to latest migration preserves existing data and adds tables',
+    () async {
+      sqfliteFfiInit();
+      final dir = await Directory.systemTemp.createTemp('drivetracker_v2_');
+      addTearDown(() async {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      });
 
-    final path = p.join(dir.path, 'drive_tracker.db');
-    final oldDb = await databaseFactoryFfi.openDatabase(
-      path,
-      options: OpenDatabaseOptions(
-        version: 2,
-        onCreate: DatabaseMigrations.createSchema,
-      ),
-    );
-    await oldDb.insert('vehicles', _vehicleMap('veh_1'));
-    await oldDb.insert('odometer_entries', _odometerMap('odo_1', 'veh_1'));
-    await oldDb.insert('app_settings', {
-      'key': 'selected_vehicle_id',
-      'value': 'veh_1',
-      'updated_at': '2026-01-01T00:00:00.000Z',
-    });
-    await oldDb.insert('refuels', _refuelMap('refuel_1', 'veh_1'));
-    await oldDb.insert('expenses', _expenseMap('expense_1', 'veh_1'));
-    await oldDb.insert('income_records', _incomeMap('income_1', 'veh_1'));
-    await oldDb.close();
+      final path = p.join(dir.path, 'drive_tracker.db');
+      final oldDb = await databaseFactoryFfi.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: DatabaseMigrations.createSchema,
+        ),
+      );
+      await oldDb.insert('vehicles', _vehicleMap('veh_1'));
+      await oldDb.insert('odometer_entries', _odometerMap('odo_1', 'veh_1'));
+      await oldDb.insert('app_settings', {
+        'key': 'selected_vehicle_id',
+        'value': 'veh_1',
+        'updated_at': '2026-01-01T00:00:00.000Z',
+      });
+      await oldDb.insert('refuels', _refuelMap('refuel_1', 'veh_1'));
+      await oldDb.insert('expenses', _expenseMap('expense_1', 'veh_1'));
+      await oldDb.insert('income_records', _incomeMap('income_1', 'veh_1'));
+      await oldDb.close();
 
-    final database = AppDatabase(
-      databaseFactory: databaseFactoryFfi,
-      databasePath: path,
-    );
-    addTearDown(database.close);
-    final db = await database.database;
+      final database = AppDatabase(
+        databaseFactory: databaseFactoryFfi,
+        databasePath: path,
+      );
+      addTearDown(database.close);
+      final db = await database.database;
 
-    expect(await db.getVersion(), 3);
-    expect((await db.query('vehicles')).single['id'], 'veh_1');
-    expect((await db.query('odometer_entries')).single['id'], 'odo_1');
-    expect((await db.query('refuels')).single['id'], 'refuel_1');
-    expect((await db.query('expenses')).single['id'], 'expense_1');
-    expect((await db.query('income_records')).single['id'], 'income_1');
-    expect(await db.query('maintenance_items'), isEmpty);
-    expect(await db.query('services'), isEmpty);
-    expect(await db.query('service_items'), isEmpty);
-    expect(
-      await db.query(
-        'sqlite_master',
-        where: 'type = ? AND name = ?',
-        whereArgs: ['index', 'idx_maintenance_items_active_name'],
-      ),
-      isNotEmpty,
-    );
-  });
+      expect(await db.getVersion(), 4);
+      expect((await db.query('vehicles')).single['id'], 'veh_1');
+      expect((await db.query('odometer_entries')).single['id'], 'odo_1');
+      expect((await db.query('refuels')).single['id'], 'refuel_1');
+      expect((await db.query('expenses')).single['id'], 'expense_1');
+      expect((await db.query('income_records')).single['id'], 'income_1');
+      expect(await db.query('maintenance_items'), isEmpty);
+      expect(await db.query('services'), isEmpty);
+      expect(await db.query('service_items'), isEmpty);
+      expect(await db.query('documents'), isEmpty);
+      expect(await db.query('attachments'), isEmpty);
+      expect(
+        await db.query(
+          'sqlite_master',
+          where: 'type = ? AND name = ?',
+          whereArgs: ['index', 'idx_maintenance_items_active_name'],
+        ),
+        isNotEmpty,
+      );
+    },
+  );
 
   group('maintenance reminder engine', () {
     const engine = MaintenanceReminderEngine();

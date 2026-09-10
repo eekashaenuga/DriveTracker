@@ -10,6 +10,8 @@ import '../../../core/utilities/scaled_decimal.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_odometer_input.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
+import '../../attachments/domain/attachment.dart';
+import '../../attachments/presentation/attachment_panel.dart';
 import '../../odometer/domain/odometer_policy.dart';
 import '../../vehicles/domain/vehicle.dart';
 import '../domain/expense.dart';
@@ -258,6 +260,17 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
                 maxLines: 5,
                 decoration: const InputDecoration(labelText: 'Notes'),
               ),
+              const SizedBox(height: DTSpacing.lg),
+              if (_isEditing)
+                AttachmentPanel(
+                  key: Key('expenseAttachments_${widget.expense!.id}'),
+                  parentType: AttachmentParentType.expense,
+                  parentId: widget.expense!.id,
+                )
+              else
+                const _AttachmentsAfterSaveHint(
+                  text: 'Save this expense, then add receipt PDFs or images.',
+                ),
               if (_formError != null) ...[
                 const SizedBox(height: DTSpacing.lg),
                 Text(
@@ -484,6 +497,37 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
       }
     }
     return null;
+  }
+}
+
+class _AttachmentsAfterSaveHint extends StatelessWidget {
+  const _AttachmentsAfterSaveHint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
+      borderRadius: DTRadii.cardRadius,
+      child: Padding(
+        padding: const EdgeInsets.all(DTSpacing.md),
+        child: Row(
+          children: [
+            Icon(Icons.attach_file_rounded, color: colors.primary),
+            const SizedBox(width: DTSpacing.md),
+            Expanded(
+              child: Text(
+                text,
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

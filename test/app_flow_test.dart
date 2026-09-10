@@ -1,11 +1,16 @@
+import 'dart:io';
+
 import 'package:drivetracker/app/app.dart';
 import 'package:drivetracker/app/app_controller.dart';
 import 'package:drivetracker/app/theme/dt_theme.dart';
+import 'package:drivetracker/features/attachments/domain/attachment.dart';
+import 'package:drivetracker/features/attachments/domain/attachment_io.dart';
 import 'package:drivetracker/features/daily_records/domain/daily_activity.dart';
 import 'package:drivetracker/features/daily_records/domain/expense.dart';
 import 'package:drivetracker/features/daily_records/domain/income.dart';
 import 'package:drivetracker/features/daily_records/domain/record_category.dart';
 import 'package:drivetracker/features/daily_records/domain/refuel.dart';
+import 'package:drivetracker/features/documents/domain/vehicle_document.dart';
 import 'package:drivetracker/features/home/presentation/home_screen.dart';
 import 'package:drivetracker/features/maintenance/domain/maintenance_item.dart';
 import 'package:drivetracker/features/maintenance/domain/maintenance_reminder.dart';
@@ -14,6 +19,7 @@ import 'package:drivetracker/features/vehicles/domain/vehicle.dart';
 import 'package:drivetracker/features/vehicles/domain/vehicle_draft.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import 'helpers/test_services.dart';
@@ -977,6 +983,130 @@ void main() {
     expect(find.text('£45.00'), findsWidgets);
   });
 
+  testWidgets('Documents add attachment reminder and archive flow', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    final now = DateTime(2026, 9, 20, 12);
+    late Vehicle vehicle;
+    await tester.runAsync(() async {
+      vehicle = await services.vehicleService.addVehicle(
+        _draft('Commuter', 64000),
+      );
+    });
+
+    await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('mainActionButton')),
+      now: now,
+    );
+
+    await _openDocumentsScreen(tester);
+    expect(find.text('No documents yet'), findsOneWidget);
+    await _tapAndPump(tester, find.byKey(const Key('emptyAddDocumentButton')));
+    await _pumpUntilFound(tester, find.byKey(const Key('documentTitleField')));
+
+    await tester.enterText(
+      find.byKey(const Key('documentTitleField')),
+      'Insurance policy',
+    );
+    await _scrollUntilFound(tester, find.byTooltip('Choose Expiry date'));
+    await _tapAndPump(tester, find.byTooltip('Choose Expiry date'));
+    await _tapDatePickerDay(tester, 25);
+    await _tapDatePickerTextAction(tester, 'OK');
+    await _scrollUntilFound(
+      tester,
+      find.byKey(const Key('documentProviderField')),
+    );
+    await tester.enterText(
+      find.byKey(const Key('documentProviderField')),
+      'Admiral',
+    );
+    await _scrollUntilFound(
+      tester,
+      find.byKey(const Key('documentReferenceField')),
+    );
+    await tester.enterText(
+      find.byKey(const Key('documentReferenceField')),
+      'ABC123',
+    );
+    await _tapAndRunAsync(tester, find.byKey(const Key('saveDocumentButton')));
+
+    final documents = await tester.runAsync<List<VehicleDocument>>(
+      () => services.documents.listForVehicle(vehicle.id),
+    );
+    final document = (documents ?? fail('Expected saved document.')).single;
+    final card = find.byKey(Key('documentCard_${document.id}'));
+    await _pumpUntilFound(tester, card);
+    expect(find.text('Insurance policy'), findsWidgets);
+    expect(find.textContaining('Expires in 5 days'), findsWidgets);
+
+    await _tapAndPump(tester, card);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('documentDetailsLoaded')),
+    );
+    final source = await tester.runAsync<File>(
+      () => _writeAttachmentSource(services, 'policy-proof.pdf'),
+    );
+    final attachmentSource =
+        source ?? fail('Expected attachment source file to be created.');
+    services.attachmentPicker.nextSource = AttachmentSource(
+      sourcePath: attachmentSource.path,
+      fileName: 'policy proof.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 4,
+    );
+    await _tapAndRunAsync(
+      tester,
+      find.byKey(Key('addAttachment_${document.id}')),
+    );
+    await _pumpUntilFound(tester, find.text('policy proof.pdf'));
+    expect(services.attachmentPicker.pickCount, 1);
+    expect(
+      await tester.runAsync(
+        () => services.attachments.listForParent(
+          AttachmentParentType.document,
+          document.id,
+        ),
+      ),
+      hasLength(1),
+    );
+
+    await _tapBack(tester);
+    await _tapBack(tester);
+    await _tapAndPump(tester, find.text('Reminders').last);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('documentReminder_${document.id}')),
+    );
+    expect(find.text('Insurance: Insurance policy'), findsOneWidget);
+
+    await _tapAndPump(
+      tester,
+      find.byKey(Key('documentReminder_${document.id}')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('documentDetailsLoaded')),
+    );
+    await _tapAndPump(tester, find.byTooltip('Document actions'));
+    await _tapAndRunAsync(tester, find.text('Archive'));
+    final archived = await _waitForDocumentArchived(
+      tester,
+      services,
+      document.id,
+    );
+    expect(archived.isArchived, isTrue);
+    await _tapBack(tester);
+    await _pumpUntilGone(
+      tester,
+      find.byKey(Key('documentReminder_${document.id}')),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Insights renders real data and drills down to filtered History',
     (tester) async {
@@ -1683,6 +1813,11 @@ Future<DriveTrackerController> _pumpApp(
   final controller = DriveTrackerController(
     database: services.database,
     clock: now == null ? null : () => now,
+    attachmentStorage: ManagedAttachmentStorage(
+      rootDirectory: () async => services.attachmentRoot,
+    ),
+    attachmentPicker: services.attachmentPicker,
+    attachmentOpener: services.attachmentOpener,
   );
   await tester.runAsync(controller.initialize);
   await tester.pumpWidget(
@@ -1781,6 +1916,53 @@ Future<void> _openHistoryScreen(WidgetTester tester) async {
   await _pumpUntilFound(tester, find.text('History'));
   await _tapAndPump(tester, find.text('History').first);
   await _pumpUntilFound(tester, find.byKey(const Key('historyFilterField')));
+}
+
+Future<void> _openDocumentsScreen(WidgetTester tester) async {
+  await _tapAndPump(tester, find.text('More').last);
+  await _pumpUntilFound(tester, find.byKey(const Key('moreDocumentsTile')));
+  await _tapAndPump(tester, find.byKey(const Key('moreDocumentsTile')));
+  await _pumpUntilFound(tester, find.byKey(const Key('documentsLoaded')));
+}
+
+Future<void> _tapBack(WidgetTester tester) async {
+  final backButton = find.byTooltip('Back').hitTestable();
+  await _pumpUntilFound(tester, backButton);
+  await tester.tap(backButton.first);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+}
+
+Future<VehicleDocument> _waitForDocumentArchived(
+  WidgetTester tester,
+  TestServices services,
+  String documentId,
+) async {
+  VehicleDocument? lastDocument;
+  for (var index = 0; index < 50; index += 1) {
+    final document = await tester.runAsync<VehicleDocument?>(
+      () => services.documents.getById(documentId),
+    );
+    lastDocument = document;
+    if (document != null && document.isArchived) {
+      return document;
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  final document =
+      lastDocument ?? fail('Expected document $documentId to remain stored.');
+  expect(
+    document.isArchived,
+    isTrue,
+    reason: 'Expected document to be archived.',
+  );
+  return document;
+}
+
+Future<File> _writeAttachmentSource(TestServices services, String name) async {
+  final file = File(p.join(services.attachmentRoot.parent.path, name));
+  await file.parent.create(recursive: true);
+  return file.writeAsBytes([1, 2, 3, 4]);
 }
 
 Finder _historyActivityRowsForType(DailyActivityType type) {

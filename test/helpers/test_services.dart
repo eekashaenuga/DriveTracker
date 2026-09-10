@@ -3,6 +3,10 @@ import 'dart:math';
 
 import 'package:drivetracker/core/database/app_database.dart';
 import 'package:drivetracker/core/utilities/id_generator.dart';
+import 'package:drivetracker/features/attachments/data/attachment_repository.dart';
+import 'package:drivetracker/features/attachments/domain/attachment.dart';
+import 'package:drivetracker/features/attachments/domain/attachment_io.dart';
+import 'package:drivetracker/features/attachments/domain/attachment_service.dart';
 import 'package:drivetracker/features/daily_records/data/activity_repository.dart';
 import 'package:drivetracker/features/daily_records/data/category_repository.dart';
 import 'package:drivetracker/features/daily_records/data/expense_repository.dart';
@@ -13,6 +17,8 @@ import 'package:drivetracker/features/daily_records/domain/category_service.dart
 import 'package:drivetracker/features/daily_records/domain/expense_service.dart';
 import 'package:drivetracker/features/daily_records/domain/income_service.dart';
 import 'package:drivetracker/features/daily_records/domain/refuel_service.dart';
+import 'package:drivetracker/features/documents/data/document_repository.dart';
+import 'package:drivetracker/features/documents/domain/document_service.dart';
 import 'package:drivetracker/features/home/data/home_repository.dart';
 import 'package:drivetracker/features/insights/data/insights_repository.dart';
 import 'package:drivetracker/features/maintenance/data/maintenance_item_repository.dart';
@@ -29,7 +35,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class TestServices {
-  TestServices(this.database)
+  TestServices(this.database, {Directory? attachmentRoot})
     : vehicles = VehicleRepository(database),
       odometers = OdometerRepository(database),
       settings = SettingsRepository(database),
@@ -40,7 +46,14 @@ class TestServices {
       activities = ActivityRepository(database),
       insights = InsightsRepository(database),
       maintenanceItems = MaintenanceItemRepository(database),
-      serviceRecords = ServiceRecordRepository(database) {
+      serviceRecords = ServiceRecordRepository(database),
+      attachments = AttachmentRepository(database),
+      documents = DocumentRepository(database),
+      attachmentRoot =
+          attachmentRoot ??
+          Directory.systemTemp.createTempSync('drivetracker_files_'),
+      attachmentPicker = TestAttachmentPicker(),
+      attachmentOpener = TestAttachmentOpener() {
     final idGenerator = IdGenerator(random: Random(42));
     var clockTick = 0;
     DateTime testClock(int day, int hour) {
@@ -73,11 +86,33 @@ class TestServices {
       idGenerator: idGenerator,
       clock: () => testClock(2, 13),
     );
+    attachmentService = AttachmentService(
+      database: database,
+      attachmentRepository: attachments,
+      storage: ManagedAttachmentStorage(
+        rootDirectory: () async => this.attachmentRoot,
+      ),
+      picker: attachmentPicker,
+      opener: attachmentOpener,
+      parentExists: _parentExists,
+      idGenerator: idGenerator,
+      clock: () => testClock(2, 14),
+    );
+    documentService = DocumentService(
+      database: database,
+      vehicleRepository: vehicles,
+      documentRepository: documents,
+      attachmentRepository: attachments,
+      attachmentService: attachmentService,
+      idGenerator: idGenerator,
+      clock: () => testClock(2, 15),
+    );
     refuelService = RefuelService(
       database: database,
       vehicleRepository: vehicles,
       odometerRepository: odometers,
       refuelRepository: refuels,
+      attachmentService: attachmentService,
       idGenerator: idGenerator,
       clock: () => testClock(3, 12),
     );
@@ -87,6 +122,7 @@ class TestServices {
       categoryRepository: categories,
       odometerRepository: odometers,
       expenseRepository: expenses,
+      attachmentService: attachmentService,
       idGenerator: idGenerator,
       clock: () => testClock(4, 12),
     );
@@ -96,6 +132,7 @@ class TestServices {
       categoryRepository: categories,
       odometerRepository: odometers,
       incomeRepository: incomes,
+      attachmentService: attachmentService,
       idGenerator: idGenerator,
       clock: () => testClock(5, 12),
     );
@@ -126,6 +163,7 @@ class TestServices {
       maintenanceItemRepository: maintenanceItems,
       odometerRepository: odometers,
       serviceRecordRepository: serviceRecords,
+      attachmentService: attachmentService,
       idGenerator: idGenerator,
       clock: () => testClock(7, 12),
     );
@@ -143,6 +181,11 @@ class TestServices {
   final InsightsRepository insights;
   final MaintenanceItemRepository maintenanceItems;
   final ServiceRecordRepository serviceRecords;
+  final AttachmentRepository attachments;
+  final DocumentRepository documents;
+  final Directory attachmentRoot;
+  final TestAttachmentPicker attachmentPicker;
+  final TestAttachmentOpener attachmentOpener;
   late final VehicleService vehicleService;
   late final OdometerService odometerService;
   late final CategoryService categoryService;
@@ -153,6 +196,53 @@ class TestServices {
   late final HomeRepository homeRepository;
   late final MaintenanceItemService maintenanceItemService;
   late final ServiceRecordService serviceRecordService;
+  late final AttachmentService attachmentService;
+  late final DocumentService documentService;
+
+  Future<bool> _parentExists(
+    AttachmentParentType parentType,
+    String parentId,
+  ) async {
+    return switch (parentType) {
+      AttachmentParentType.document =>
+        await documents.getById(parentId) != null,
+      AttachmentParentType.refuel => await refuels.getById(parentId) != null,
+      AttachmentParentType.service =>
+        await serviceRecords.getById(parentId) != null,
+      AttachmentParentType.expense => await expenses.getById(parentId) != null,
+      AttachmentParentType.income => await incomes.getById(parentId) != null,
+      AttachmentParentType.vehicle => await vehicles.getById(parentId) != null,
+    };
+  }
+}
+
+class TestAttachmentPicker implements AttachmentPicker {
+  AttachmentSource? nextSource;
+  int pickCount = 0;
+
+  @override
+  Future<AttachmentSource?> pickAttachment() async {
+    pickCount += 1;
+    final source = nextSource;
+    nextSource = null;
+    return source;
+  }
+}
+
+class TestAttachmentOpener implements AttachmentOpener {
+  AttachmentOpenResult nextResult = const AttachmentOpenResult(
+    AttachmentOpenStatus.opened,
+  );
+  final opened = <String>[];
+
+  @override
+  Future<AttachmentOpenResult> openAttachment({
+    required String absolutePath,
+    required String? mimeType,
+  }) async {
+    opened.add(absolutePath);
+    return nextResult;
+  }
 }
 
 TestServices createTestServices() {
@@ -169,7 +259,10 @@ TestServices createTestServices() {
     }
   });
 
-  return TestServices(database);
+  return TestServices(
+    database,
+    attachmentRoot: Directory(p.join(dir.path, 'files')),
+  );
 }
 
 Future<TestServices> createFileBackedTestServices() async {
@@ -187,5 +280,8 @@ Future<TestServices> createFileBackedTestServices() async {
     }
   });
 
-  return TestServices(database);
+  return TestServices(
+    database,
+    attachmentRoot: Directory(p.join(dir.path, 'files')),
+  );
 }

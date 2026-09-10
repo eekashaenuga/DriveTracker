@@ -8,6 +8,10 @@ import '../../features/daily_records/presentation/expense_form_screen.dart';
 import '../../features/daily_records/presentation/history_screen.dart';
 import '../../features/daily_records/presentation/income_form_screen.dart';
 import '../../features/daily_records/presentation/refuel_form_screen.dart';
+import '../../features/documents/domain/vehicle_document.dart';
+import '../../features/documents/presentation/document_details_screen.dart';
+import '../../features/documents/presentation/document_form_screen.dart';
+import '../../features/documents/presentation/documents_screen.dart';
 import '../../features/maintenance/domain/maintenance_item.dart';
 import '../../features/maintenance/domain/service_record.dart';
 import '../../features/maintenance/presentation/maintenance_item_details_screen.dart';
@@ -104,6 +108,52 @@ class AppNavigation {
     return Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const MaintenanceScreen()));
+  }
+
+  static Future<void> openDocuments(BuildContext context) {
+    return Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => const DocumentsScreen()));
+  }
+
+  static Future<VehicleDocument?> openAddDocument(BuildContext context) {
+    return Navigator.of(context).push<VehicleDocument>(
+      MaterialPageRoute<VehicleDocument>(
+        builder: (_) => const DocumentFormScreen(),
+      ),
+    );
+  }
+
+  static Future<VehicleDocument?> openEditDocument(
+    BuildContext context,
+    VehicleDocument document,
+  ) {
+    return Navigator.of(context).push<VehicleDocument>(
+      MaterialPageRoute<VehicleDocument>(
+        builder: (_) => DocumentFormScreen(document: document),
+      ),
+    );
+  }
+
+  static Future<VehicleDocument?> openRenewDocument(
+    BuildContext context,
+    VehicleDocument document,
+  ) {
+    return Navigator.of(context).push<VehicleDocument>(
+      MaterialPageRoute<VehicleDocument>(
+        builder: (_) => DocumentFormScreen(renewingFrom: document),
+      ),
+    );
+  }
+
+  static Future<void> openDocumentDetails(
+    BuildContext context,
+    String documentId,
+  ) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DocumentDetailsScreen(documentId: documentId),
+      ),
+    );
   }
 
   static Future<void> openAddMaintenanceItem(BuildContext context) {

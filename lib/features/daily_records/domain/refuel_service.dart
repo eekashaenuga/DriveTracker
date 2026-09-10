@@ -6,6 +6,8 @@ import '../../../core/utilities/validation_exception.dart';
 import '../../odometer/data/odometer_repository.dart';
 import '../../odometer/domain/odometer_entry.dart';
 import '../../odometer/domain/odometer_policy.dart';
+import '../../attachments/domain/attachment.dart';
+import '../../attachments/domain/attachment_service.dart';
 import '../../vehicles/data/vehicle_repository.dart';
 import '../data/refuel_repository.dart';
 import 'daily_record_validation.dart';
@@ -20,6 +22,7 @@ class RefuelService {
     required this.vehicleRepository,
     required this.odometerRepository,
     required this.refuelRepository,
+    this.attachmentService,
     this.policy = const OdometerPolicy(),
     IdGenerator? idGenerator,
     Clock? clock,
@@ -30,6 +33,7 @@ class RefuelService {
   final VehicleRepository vehicleRepository;
   final OdometerRepository odometerRepository;
   final RefuelRepository refuelRepository;
+  final AttachmentService? attachmentService;
   final OdometerPolicy policy;
   final IdGenerator _idGenerator;
   final Clock _clock;
@@ -125,6 +129,10 @@ class RefuelService {
       );
       await refuelRepository.delete(existing.id, executor: txn);
     });
+    await attachmentService?.removeAttachmentsForParent(
+      AttachmentParentType.refuel,
+      existing.id,
+    );
   }
 
   Future<void> _validateDraft(
