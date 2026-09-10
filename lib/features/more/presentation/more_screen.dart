@@ -64,11 +64,16 @@ class MoreScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => AppNavigation.openDocuments(context),
             ),
-            const DTSectionHeader(title: 'Planned'),
-            const _ComingLaterTile(
-              icon: Icons.calculate_outlined,
-              title: 'Fuel calculator',
+            const DTSectionHeader(title: 'Tools'),
+            ListTile(
+              key: const Key('moreFuelCalculatorTile'),
+              leading: const Icon(Icons.calculate_outlined),
+              title: const Text('Fuel Calculator'),
+              subtitle: const Text('Trip cost, sharing, fuel and price checks'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => AppNavigation.openFuelCalculator(context),
             ),
+            const DTSectionHeader(title: 'Planned'),
             const _ComingLaterTile(
               icon: Icons.backup_outlined,
               title: 'Backup & restore',
