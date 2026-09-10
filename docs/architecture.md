@@ -309,6 +309,25 @@ The screen avoids large subtree animations and whole-screen transitions. It uses
 
 Home maintenance attention only surfaces active reminder-enabled items that need setup or are upcoming, due soon, due, or overdue. Normal and archived items remain available in maintenance screens but do not crowd the Home dashboard.
 
+## Tools And Fuel Calculator
+
+Milestone 7 keeps schema version `4`; it adds no migration and no calculator persistence table. Calculator state is ephemeral UI state. Results never create refuel, expense, income, service, odometer, document, attachment, or history rows.
+
+`lib/features/calculator/domain/fuel_calculator.dart` owns the calculation model:
+
+- `FuelUnitConversions` converts miles/kilometres, litres/Imperial gallons/US gallons, and economy values.
+- `TripCostInput` and `TripCostResult` estimate fuel required, fuel cost, and cost per distance.
+- `CostSharingInput` and `CostSharingResult` split a known fuel cost or a calculated trip cost.
+- `FuelRequiredInput` and `FuelRequiredResult` expose litres plus Imperial and US gallon equivalents.
+- `FuelPriceComparisonInput` and `FuelPriceComparisonResult` compare station prices and optional additional round-trip travel cost.
+- `VehicleFuelDefaults` packages the selected vehicle's safe calculator defaults from the existing dashboard data.
+
+Fuel calculator constants are centralized: `1 mile = 1.609344 km`, `1 Imperial gallon = 4.54609 L`, and `1 US gallon = 3.785411784 L`. UK MPG, US MPG, L/100 km, and km/L conversion goes through litres-per-100-kilometres so reciprocal units cannot be treated as linear values.
+
+Vehicle defaults deliberately reuse existing trusted data. The selected vehicle can provide its latest valid full-to-full UK MPG interval from `FuelEconomyCalculator.validIntervals` and latest recorded refuel price from `HomeRepository`/`VehicleDashboard`. Partial fills, missed-refuel sequences, non-progressing odometers, unsupported distance units, and insufficient history do not fabricate an economy default. Selecting another vehicle refreshes defaults for that vehicle only; manual values remain available.
+
+The Fuel Calculator screen is reached from More -> Fuel Calculator. It presents Trip Cost, Cost Sharing, Fuel Required, and Price Comparison as modes of one tool surface, uses numeric keyboards and unit suffixes, labels results as estimates, distinguishes "From vehicle" from "Manual", and uses finite-width responsive field/result layouts for narrow Android screens and wider test viewports.
+
 ## Dependency Decisions
 
 - `sqflite` is the mature mobile SQLite package used for Android persistence.
@@ -316,4 +335,5 @@ Home maintenance attention only surfaces active reminder-enabled items that need
 - `provider` keeps app state lightweight and understandable for this milestone.
 - No routing package was added because the current navigation is small and imperative routes keep the dependency surface lower.
 - No Flutter picker/path/open-file packages were added for Milestone 6. Android-first file selection, managed-root discovery, and external opening use the existing Flutter method-channel capability plus a small Android implementation, keeping `pubspec.yaml` and `pubspec.lock` unchanged.
+- No dependencies were added for Milestone 7. Fuel calculator formulas and UI use Dart, Flutter Material, and existing DriveTracker utilities.
 - No analytics, telemetry, sync, account, or cloud packages are included.

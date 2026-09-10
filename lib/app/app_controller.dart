@@ -7,6 +7,7 @@ import '../features/attachments/data/attachment_repository.dart';
 import '../features/attachments/domain/attachment.dart';
 import '../features/attachments/domain/attachment_io.dart';
 import '../features/attachments/domain/attachment_service.dart';
+import '../features/calculator/domain/fuel_calculator.dart';
 import '../features/daily_records/data/activity_repository.dart';
 import '../features/daily_records/data/category_repository.dart';
 import '../features/daily_records/data/expense_repository.dart';
@@ -212,6 +213,14 @@ class DriveTrackerController extends ChangeNotifier {
 
   FuelEconomyInterval? get latestFuelEconomyInterval {
     return _dashboard?.latestFuelEconomyInterval;
+  }
+
+  VehicleFuelDefaults get vehicleFuelDefaults {
+    return VehicleFuelDefaults.fromDashboard(
+      vehicle: selectedVehicle,
+      latestFuelEconomyInterval: latestFuelEconomyInterval,
+      latestFuelPriceMicrosPerLitre: latestFuelPriceMicrosPerLitre,
+    );
   }
 
   List<DailyActivity> get recentActivity {

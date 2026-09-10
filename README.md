@@ -4,7 +4,7 @@ DriveTracker is a local-first Flutter application for managing vehicles, mileage
 
 ## Current Milestone
 
-Implemented through Milestone 6:
+Implemented through Milestone 7:
 
 - Material 3 app shell with Home, Insights, central add action, Reminders, and More.
 - First-run flow from welcome screen to adding the first vehicle.
@@ -30,8 +30,12 @@ Implemented through Milestone 6:
 - Document lifecycle support with active/current documents, archived history, renewal that preserves old records, and deliberate permanent delete.
 - Local file attachments for documents, refuels, services, expenses, and income records, storing metadata in SQLite while copying PDFs/JPG/JPEG/PNG files into DriveTracker-managed app storage.
 - Document expiry reminders derived from recorded expiry dates and shown in the Reminders screen without claiming external verification.
+- Tools entry under More with a polished Fuel Calculator for Trip Cost, Cost Sharing, Fuel Required, and Fuel Price Comparison.
+- Pure calculator domain logic for miles/kilometres, litres/Imperial gallons/US gallons, UK MPG, US MPG, L/100 km, and km/L conversion.
+- Selected-vehicle calculator defaults that can use the current vehicle's latest trustworthy full-to-full fuel economy and latest recorded fuel price, while keeping manual input available and clearly labelled.
+- Ephemeral fuel estimates that do not create refuels, expenses, services, odometer readings, calculator history, or any other persisted vehicle record.
 - Settings foundation for system, light, and dark theme preferences.
-- Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, Home dashboard aggregation, spending trends, History filters, Insights calculations, drill-down, migrations, document lifecycle, attachments, layout states, and important UI flows.
+- Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, Home dashboard aggregation, spending trends, History filters, Insights calculations, drill-down, migrations, document lifecycle, attachments, calculator formulas/defaults/UI, layout states, and important UI flows.
 
 Deferred to later milestones:
 
@@ -58,6 +62,7 @@ The project uses a feature-oriented structure:
 - `lib/features/maintenance`: maintenance item, service record, service item, reminder engine, repositories, services, forms, detail screen, management screen, and Reminders integration.
 - `lib/features/documents`: vehicle document model, repository, service, expiry reminders, Documents list, form, and detail screens.
 - `lib/features/attachments`: polymorphic attachment metadata, managed-file storage, Android picker/open bridge, service, and reusable attachment panel.
+- `lib/features/calculator`: pure fuel calculator domain logic and the More-accessible calculator UI.
 - `lib/features/home`: dashboard data contract and Home UI.
 - `lib/features/insights`: derived analytics repository, range-aware insight models, and the Insights dashboard.
 - `lib/features/reminders`, `lib/features/more`, `lib/features/settings`: milestone screens and settings foundation.
@@ -94,6 +99,21 @@ Documents are vehicle-specific user records. DriveTracker stores titles, categor
 
 Attachments are optional. SQLite stores attachment metadata and a portable relative path. Actual file bytes are copied into DriveTracker-managed application storage under `attachments/<parent-type>/<parent-id>/<generated-id>.<extension>`, not stored as BLOBs and not permanently linked to external picker locations. Supported files are PDF, JPG/JPEG, and PNG up to 20 MB each. Deletion removes database metadata before best-effort managed-file cleanup so filesystem failures do not corrupt record metadata.
 
+## Tools And Fuel Calculator
+
+Milestone 7 adds a Fuel Calculator from More without changing the database schema. The screen contains four modes in one calculator system:
+
+- Trip Cost estimates fuel required, fuel cost, and cost per distance unit.
+- Cost Sharing splits a known fuel cost or an estimated trip fuel cost between people.
+- Fuel Required converts a distance and economy into litres, Imperial gallons, and US gallons.
+- Price Comparison compares two station prices per litre and can subtract the estimated fuel cost of an additional round-trip distance.
+
+Calculator formulas live in `lib/features/calculator/domain` and are not embedded in widgets. Unit conversion uses precise constants for miles/kilometres, Imperial gallons, and US gallons. Economy conversion treats L/100 km and km/L as reciprocal units rather than linear labels.
+
+The calculator can copy defaults from the selected vehicle when available: the latest trustworthy full-to-full UK MPG interval and the latest recorded fuel price. It never combines vehicles, never uses All Vehicles as a trip-economy source, and never fabricates economy from partial or missed refuel history. If defaults are missing, the same tools remain usable with manual values.
+
+Calculator results are estimates. They are labelled as based on recorded or manual values and are not saved as transactions, history, refuels, expenses, services, or odometer readings.
+
 ## Run
 
 ```bash
@@ -114,7 +134,7 @@ flutter build apk --debug
 
 ## Privacy
 
-DriveTracker is local-first. It stores vehicle, odometer, refuel, expense, income, category, service, maintenance, document, and attachment metadata in a local SQLite database on the device. Managed attachment files stay in app-controlled local storage. It does not require login, internet access, analytics SDKs, advertising SDKs, or cloud sync.
+DriveTracker is local-first. It stores vehicle, odometer, refuel, expense, income, category, service, maintenance, document, and attachment metadata in a local SQLite database on the device. Managed attachment files stay in app-controlled local storage. Calculator inputs and results are not persisted. It does not require login, internet access, analytics SDKs, advertising SDKs, or cloud sync.
 
 ## Roadmap Summary
 
