@@ -4,11 +4,11 @@ DriveTracker is a local-first Flutter application for managing vehicles, mileage
 
 ## Current Milestone
 
-Implemented through Milestone 5:
+Implemented through Milestone 6:
 
 - Material 3 app shell with Home, Insights, central add action, Reminders, and More.
 - First-run flow from welcome screen to adding the first vehicle.
-- SQLite schema version 3 with controlled migrations from V1 and V2.
+- SQLite schema version 4 with controlled migrations from V1, V2, and V3.
 - Vehicle creation, editing, listing, switching, and archiving.
 - Multiple active vehicles with persisted selected vehicle.
 - Odometer entries with manual readings and historical lower-reading confirmation.
@@ -26,12 +26,16 @@ Implemented through Milestone 5:
 - Unified History for fuel, expense, income, service, and manual odometer records, with vehicle, record type, date-range, category, and text-search filters.
 - Home dashboard backed by stored vehicle, odometer, refuel, expense, service, and maintenance reminder data, including selected-vehicle switching, odometer updates, monthly spend, latest fuel price, latest full-to-full MPG, maintenance attention, recent activity, History access, and a six-month spending trend.
 - Insights dashboard backed only by stored records, including expenditure/income/net summaries, distance availability, weighted fuel price, aggregate full-to-full MPG, spending buckets, category breakdowns, fuel and odometer trend data, and drill-down into filtered History.
+- Vehicle Documents for selected-vehicle records such as Insurance, MOT, V5C, purchase receipts, warranties, breakdown cover, tax, finance/lease paperwork, and custom document categories.
+- Document lifecycle support with active/current documents, archived history, renewal that preserves old records, and deliberate permanent delete.
+- Local file attachments for documents, refuels, services, expenses, and income records, storing metadata in SQLite while copying PDFs/JPG/JPEG/PNG files into DriveTracker-managed app storage.
+- Document expiry reminders derived from recorded expiry dates and shown in the Reminders screen without claiming external verification.
 - Settings foundation for system, light, and dark theme preferences.
-- Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, Home dashboard aggregation, spending trends, History filters, Insights calculations, drill-down, migrations, layout states, and important UI flows.
+- Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, Home dashboard aggregation, spending trends, History filters, Insights calculations, drill-down, migrations, document lifecycle, attachments, layout states, and important UI flows.
 
 Deferred to later milestones:
 
-- Documents, notifications, exports, backup/restore, sync, accounts, OCR, and external vehicle integrations.
+- Notifications, exports, backup/restore, sync, accounts, OCR, and external vehicle integrations.
 
 ## Technology
 
@@ -40,7 +44,7 @@ Deferred to later milestones:
 - SQLite via `sqflite`
 - `sqflite_common_ffi` for repository tests and future desktop compatibility
 - `provider` for lightweight app state
-- `path` for database path handling
+- `path` for database and managed attachment path handling
 
 ## Architecture
 
@@ -52,6 +56,8 @@ The project uses a feature-oriented structure:
 - `lib/features/odometer`: odometer model, policy, repository, service, and update UI.
 - `lib/features/daily_records`: refuel, expense, income, category, calculation, activity, History filtering, repository, service, form, and History code.
 - `lib/features/maintenance`: maintenance item, service record, service item, reminder engine, repositories, services, forms, detail screen, management screen, and Reminders integration.
+- `lib/features/documents`: vehicle document model, repository, service, expiry reminders, Documents list, form, and detail screens.
+- `lib/features/attachments`: polymorphic attachment metadata, managed-file storage, Android picker/open bridge, service, and reusable attachment panel.
 - `lib/features/home`: dashboard data contract and Home UI.
 - `lib/features/insights`: derived analytics repository, range-aware insight models, and the Insights dashboard.
 - `lib/features/reminders`, `lib/features/more`, `lib/features/settings`: milestone screens and settings foundation.
@@ -64,7 +70,7 @@ Presentation widgets do not issue raw SQL. Business rules live in validators and
 
 History queries are repository-owned and use `event_datetime`, not `created_at`. Filters support selected or all active vehicles, record type, all/week/month/year/custom date ranges, expense/income category, and text search across useful stored fields such as notes, merchant/source, garage, station, category, service item text, odometer text, and vehicle identity.
 
-Insights are derived, not persisted. Schema version remains 3 because Milestone 5 adds no new source data. Spending is:
+Insights are derived, not persisted. Milestone 6 moves the source schema to V4 for documents and attachments, but analytics mathematics still uses the same financial source tables. Spending is:
 
 `refuels + non-baseline service totals + standalone expenses`
 
@@ -81,6 +87,12 @@ Charts use local-calendar buckets: week uses days, month uses weekly buckets, ye
 All Vehicles aggregates spending, income, net, category breakdown, and weighted fuel price. It intentionally marks odometer distance, MPG, and cost-per-distance unavailable because unrelated vehicle odometers and MPG intervals are not mathematically safe to combine.
 
 See `docs/architecture.md` for the schema and design notes.
+
+## Documents And Attachments
+
+Documents are vehicle-specific user records. DriveTracker stores titles, categories, optional provider/reference/notes, issue dates, expiry dates, archive state, and lifecycle timestamps. Status is derived from the recorded expiry date: no expiry, recorded, expiring soon within 30 days, or expired after the date has passed. This is only a local record of what the user entered; DriveTracker does not verify MOT, tax, insurance, ownership, document authenticity, or legal validity.
+
+Attachments are optional. SQLite stores attachment metadata and a portable relative path. Actual file bytes are copied into DriveTracker-managed application storage under `attachments/<parent-type>/<parent-id>/<generated-id>.<extension>`, not stored as BLOBs and not permanently linked to external picker locations. Supported files are PDF, JPG/JPEG, and PNG up to 20 MB each. Deletion removes database metadata before best-effort managed-file cleanup so filesystem failures do not corrupt record metadata.
 
 ## Run
 
@@ -102,8 +114,8 @@ flutter build apk --debug
 
 ## Privacy
 
-DriveTracker is local-first. It stores vehicle, odometer, refuel, expense, income, category, service, and maintenance data in a local SQLite database on the device. It does not require login, internet access, analytics SDKs, advertising SDKs, or cloud sync.
+DriveTracker is local-first. It stores vehicle, odometer, refuel, expense, income, category, service, maintenance, document, and attachment metadata in a local SQLite database on the device. Managed attachment files stay in app-controlled local storage. It does not require login, internet access, analytics SDKs, advertising SDKs, or cloud sync.
 
 ## Roadmap Summary
 
-Next milestones can add documents, notifications, exports, backup/restore, and optional integrations. These should build on the existing repository/service boundaries and schema migration path rather than replacing user data.
+Next milestones can add notifications, exports, backup/restore, and optional integrations. These should build on the existing repository/service boundaries, schema migration path, and portable relative attachment paths rather than replacing user data.
