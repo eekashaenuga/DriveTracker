@@ -8,6 +8,7 @@ import '../features/attachments/domain/attachment.dart';
 import '../features/attachments/domain/attachment_io.dart';
 import '../features/attachments/domain/attachment_service.dart';
 import '../features/calculator/domain/fuel_calculator.dart';
+import '../features/data_safety/domain/data_safety_service.dart';
 import '../features/daily_records/data/activity_repository.dart';
 import '../features/daily_records/data/category_repository.dart';
 import '../features/daily_records/data/expense_repository.dart';
@@ -57,8 +58,10 @@ class DriveTrackerController extends ChangeNotifier {
     AttachmentStorage? attachmentStorage,
     AttachmentPicker? attachmentPicker,
     AttachmentOpener? attachmentOpener,
+    DataSafetyFileBridge? dataSafetyFileBridge,
   }) : _database = database,
        _clock = clock ?? DateTime.now,
+       _attachmentStorage = attachmentStorage ?? ManagedAttachmentStorage(),
        _vehicleRepository = VehicleRepository(database),
        _odometerRepository = OdometerRepository(database),
        _settingsRepository = SettingsRepository(database),
@@ -100,7 +103,7 @@ class DriveTrackerController extends ChangeNotifier {
     _attachmentService = AttachmentService(
       database: _database,
       attachmentRepository: _attachmentRepository,
-      storage: attachmentStorage ?? ManagedAttachmentStorage(),
+      storage: _attachmentStorage,
       picker: attachmentPicker ?? const PlatformAttachmentPicker(),
       opener: attachmentOpener ?? const PlatformAttachmentOpener(),
       parentExists: _attachmentParentExists,
@@ -149,6 +152,12 @@ class DriveTrackerController extends ChangeNotifier {
       serviceRecordRepository: _serviceRecordRepository,
       attachmentService: _attachmentService,
     );
+    _dataSafetyService = DataSafetyService(
+      database: _database,
+      attachmentStorage: _attachmentStorage,
+      fileBridge: dataSafetyFileBridge,
+      clock: () => _clock().toUtc(),
+    );
   }
 
   static const _themeSystem = 'system';
@@ -157,6 +166,7 @@ class DriveTrackerController extends ChangeNotifier {
 
   final AppDatabase _database;
   final DateTime Function() _clock;
+  final AttachmentStorage _attachmentStorage;
   final VehicleRepository _vehicleRepository;
   final OdometerRepository _odometerRepository;
   final SettingsRepository _settingsRepository;
@@ -181,6 +191,7 @@ class DriveTrackerController extends ChangeNotifier {
   late final IncomeService _incomeService;
   late final MaintenanceItemService _maintenanceItemService;
   late final ServiceRecordService _serviceRecordService;
+  late final DataSafetyService _dataSafetyService;
 
   bool _initialized = false;
   bool _busy = false;
@@ -781,6 +792,45 @@ class DriveTrackerController extends ChangeNotifier {
     return _attachmentService.attachmentFileExists(attachment);
   }
 
+  Future<DataStorageSummary> dataStorageSummary() {
+    return _dataSafetyService.storageSummary();
+  }
+
+  Future<DataSafetyFileSaveResult> createAndSaveBackup() {
+    return _runMutation(_dataSafetyService.createAndSaveBackup);
+  }
+
+  Future<DataSafetyFileSaveResult> createAndSaveCsvExport() {
+    return _runMutation(_dataSafetyService.createAndSaveCsvExport);
+  }
+
+  Future<BackupInspection?> pickAndInspectBackup() {
+    return _dataSafetyService.pickAndInspectBackup();
+  }
+
+  Future<DataSafetyRestoreResult> restoreBackupFromFile(
+    String path, {
+    String? fileName,
+  }) {
+    return _runMutation(() async {
+      try {
+        final result = await _dataSafetyService.restoreBackupFromFile(
+          path,
+          fileName: fileName,
+        );
+        await _reloadData();
+        return result;
+      } on DataSafetyException {
+        try {
+          await _reloadData();
+        } catch (_) {
+          // Preserve the restore failure as the user-facing error.
+        }
+        rethrow;
+      }
+    });
+  }
+
   Future<void> setThemeMode(ThemeMode mode) async {
     return _runMutation(() async {
       _themeMode = mode;
@@ -796,6 +846,9 @@ class DriveTrackerController extends ChangeNotifier {
     try {
       return await action();
     } on ValidationException catch (error) {
+      _errorMessage = error.message;
+      rethrow;
+    } on DataSafetyException catch (error) {
       _errorMessage = error.message;
       rethrow;
     } catch (_) {

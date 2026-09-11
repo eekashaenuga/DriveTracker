@@ -18,6 +18,8 @@ abstract class AttachmentOpener {
 }
 
 abstract class AttachmentStorage {
+  Future<Directory> managedRootDirectory();
+
   Future<void> copyIntoManagedStorage({
     required String sourcePath,
     required String relativePath,
@@ -110,6 +112,9 @@ class ManagedAttachmentStorage implements AttachmentStorage {
   Directory? _cachedRoot;
 
   static const _channelName = 'drivetracker/attachments';
+
+  @override
+  Future<Directory> managedRootDirectory() => _managedRoot();
 
   @override
   Future<void> copyIntoManagedStorage({
