@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/calculator/presentation/fuel_calculator_screen.dart';
+import '../../features/data_safety/presentation/data_storage_screen.dart';
 import '../../features/daily_records/domain/expense.dart';
 import '../../features/daily_records/domain/history_filter.dart';
 import '../../features/daily_records/domain/income.dart';
@@ -201,6 +202,12 @@ class AppNavigation {
   static Future<void> openSettings(BuildContext context) {
     return Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen()));
+  }
+
+  static Future<void> openDataStorage(BuildContext context) {
+    return Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const DataStorageScreen()));
   }
 
   static Future<void> openFuelCalculator(BuildContext context) {

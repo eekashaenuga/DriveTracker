@@ -64,6 +64,14 @@ class MoreScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => AppNavigation.openDocuments(context),
             ),
+            ListTile(
+              key: const Key('moreDataStorageTile'),
+              leading: const Icon(Icons.backup_outlined),
+              title: const Text('Data & Storage'),
+              subtitle: const Text('Backup, restore, export and local usage'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => AppNavigation.openDataStorage(context),
+            ),
             const DTSectionHeader(title: 'Tools'),
             ListTile(
               key: const Key('moreFuelCalculatorTile'),
@@ -72,15 +80,6 @@ class MoreScreen extends StatelessWidget {
               subtitle: const Text('Trip cost, sharing, fuel and price checks'),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => AppNavigation.openFuelCalculator(context),
-            ),
-            const DTSectionHeader(title: 'Planned'),
-            const _ComingLaterTile(
-              icon: Icons.backup_outlined,
-              title: 'Backup & restore',
-            ),
-            const _ComingLaterTile(
-              icon: Icons.file_download_outlined,
-              title: 'Export',
             ),
             const DTSectionHeader(title: 'About'),
             const ListTile(
@@ -93,23 +92,6 @@ class MoreScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ComingLaterTile extends StatelessWidget {
-  const _ComingLaterTile({required this.icon, required this.title});
-
-  final IconData icon;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      enabled: false,
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: const Text('Planned for a later milestone'),
     );
   }
 }
