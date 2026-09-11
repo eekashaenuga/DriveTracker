@@ -88,4 +88,90 @@ class OdometerService {
     await odometerRepository.insert(entry);
     return entry;
   }
+
+  Future<OdometerEntry> updateManualReading({
+    required String entryId,
+    required int odometer,
+    required DateTime eventDateTime,
+    bool confirmUnusualSequence = false,
+  }) async {
+    if (odometer < 0) {
+      throw const ValidationException([
+        'Odometer readings cannot be negative.',
+      ]);
+    }
+
+    final existing = await odometerRepository.getById(entryId);
+    if (existing == null) {
+      throw const ValidationException(['Odometer reading not found.']);
+    }
+    if (existing.sourceType != OdometerSourceType.manual) {
+      throw const ValidationException([
+        'Only manual odometer readings can be edited from History.',
+      ]);
+    }
+
+    final vehicle = await vehicleRepository.getById(existing.vehicleId);
+    if (vehicle == null) {
+      throw const ValidationException(['Vehicle not found.']);
+    }
+
+    final now = _clock().toUtc();
+    final updated = OdometerEntry(
+      id: existing.id,
+      vehicleId: existing.vehicleId,
+      odometer: odometer,
+      eventDateTime: eventDateTime.toUtc(),
+      sourceType: existing.sourceType,
+      sourceRecordId: existing.sourceRecordId,
+      createdAt: existing.createdAt,
+      updatedAt: now,
+    );
+
+    final entries = await odometerRepository.allForVehicle(existing.vehicleId);
+    if (!confirmUnusualSequence &&
+        _isUnusualForChronologicalNeighbors(entries, updated)) {
+      throw const OdometerEditConfirmationRequired(
+        'This reading does not fit the surrounding odometer history. Save it anyway?',
+      );
+    }
+
+    await odometerRepository.update(updated);
+    return updated;
+  }
+
+  bool _isUnusualForChronologicalNeighbors(
+    List<OdometerEntry> entries,
+    OdometerEntry edited,
+  ) {
+    final chronological = [
+      for (final entry in entries)
+        if (entry.id != edited.id) entry,
+      edited,
+    ]..sort(_compareChronologically);
+
+    final index = chronological.indexWhere((entry) => entry.id == edited.id);
+    if (index < 0) {
+      return false;
+    }
+
+    final previous = index > 0 ? chronological[index - 1] : null;
+    final next = index < chronological.length - 1
+        ? chronological[index + 1]
+        : null;
+    return (previous != null && edited.odometer < previous.odometer) ||
+        (next != null && edited.odometer > next.odometer);
+  }
+
+  int _compareChronologically(OdometerEntry left, OdometerEntry right) {
+    final eventCompare = left.eventDateTime.compareTo(right.eventDateTime);
+    if (eventCompare != 0) {
+      return eventCompare;
+    }
+    final createdCompare = left.createdAt.compareTo(right.createdAt);
+    if (createdCompare != 0) {
+      return createdCompare;
+    }
+    return left.id.compareTo(right.id);
+  }
 }

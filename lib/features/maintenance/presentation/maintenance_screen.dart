@@ -6,8 +6,10 @@ import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
 import '../../../core/utilities/formatters.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
+import '../../../shared/widgets/dt_list_card.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
 import '../../../shared/widgets/dt_section_header.dart';
+import '../../../shared/widgets/dt_status_badge.dart';
 import '../../vehicles/domain/vehicle.dart';
 import '../domain/maintenance_reminder.dart';
 
@@ -160,19 +162,28 @@ class _MaintenanceReminderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    final stateLabel = reminder.shouldShowAsReminder
+        ? reminder.state.label
+        : 'No reminder';
+    final color = _colorForState(context, reminder.state);
+    return Padding(
       key: Key('maintenanceItem_${reminder.item.id}'),
-      leading: Icon(_iconForState(reminder.state)),
-      title: Text(reminder.item.name),
-      subtitle: Text(_reminderSubtitle(reminder, vehicle)),
-      trailing: Text(
-        reminder.shouldShowAsReminder ? reminder.state.label : 'No reminder',
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          fontWeight: FontWeight.w800,
-          color: _colorForState(context, reminder.state),
+      padding: const EdgeInsets.only(bottom: DTSpacing.sm),
+      child: DTListCard(
+        icon: _iconForState(reminder.state),
+        title: reminder.item.name,
+        subtitle: _reminderSubtitle(reminder, vehicle),
+        accentColor: color,
+        trailing: DTStatusBadge(
+          label: stateLabel,
+          color: color,
+          icon: reminder.shouldShowAsReminder
+              ? _iconForState(reminder.state)
+              : Icons.notifications_off_outlined,
+          compact: true,
         ),
+        onTap: onTap,
       ),
-      onTap: onTap,
     );
   }
 }

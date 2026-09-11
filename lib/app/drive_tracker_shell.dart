@@ -5,6 +5,7 @@ import '../features/insights/presentation/insights_screen.dart';
 import '../features/more/presentation/more_screen.dart';
 import '../features/reminders/presentation/reminders_screen.dart';
 import '../shared/widgets/dt_bottom_sheet.dart';
+import '../shared/widgets/dt_category_icon.dart';
 import 'router/app_navigation.dart';
 import 'theme/dt_tokens.dart';
 
@@ -203,13 +204,23 @@ class _ActionSheet extends StatelessWidget {
         icon: Icons.local_gas_station_rounded,
         title: 'Refuel',
         subtitle: 'Fuel cost, volume and odometer',
+        colorBuilder: DTAccents.fuel,
         onTap: () => AppNavigation.openRefuel(parentContext),
+      ),
+      _ActionItem(
+        key: const Key('actionServiceTile'),
+        icon: Icons.build_circle_outlined,
+        title: 'Service',
+        subtitle: 'Garage visits and item completions',
+        colorBuilder: DTAccents.service,
+        onTap: () => AppNavigation.openService(parentContext),
       ),
       _ActionItem(
         key: const Key('actionExpenseTile'),
         icon: Icons.payments_outlined,
         title: 'Expense',
         subtitle: 'Parking, tax, repairs and more',
+        colorBuilder: DTAccents.expense,
         onTap: () => AppNavigation.openExpense(parentContext),
       ),
       _ActionItem(
@@ -217,21 +228,24 @@ class _ActionSheet extends StatelessWidget {
         icon: Icons.work_outline_rounded,
         title: 'Income',
         subtitle: 'Vehicle-related income',
+        colorBuilder: DTAccents.income,
         onTap: () => AppNavigation.openIncome(parentContext),
-      ),
-      _ActionItem(
-        key: const Key('actionServiceTile'),
-        icon: Icons.build_circle_outlined,
-        title: 'Service',
-        subtitle: 'Garage visits and maintenance items',
-        onTap: () => AppNavigation.openService(parentContext),
       ),
       _ActionItem(
         key: const Key('actionOdometerTile'),
         icon: Icons.speed_rounded,
         title: 'Odometer',
         subtitle: 'Record a manual reading',
+        colorBuilder: DTAccents.odometer,
         onTap: () => AppNavigation.openUpdateOdometer(parentContext),
+      ),
+      _ActionItem(
+        key: const Key('actionMaintenanceTile'),
+        icon: Icons.handyman_rounded,
+        title: 'Maintenance',
+        subtitle: 'Intervals and reminders',
+        colorBuilder: DTAccents.maintenance,
+        onTap: () => AppNavigation.openAddMaintenanceItem(parentContext),
       ),
     ];
 
@@ -265,17 +279,39 @@ class _ActionSheet extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: DTSpacing.md),
-            for (final action in actions) ...[
-              if (action != actions.first) const SizedBox(height: DTSpacing.sm),
-              _ActionTile(
-                item: action,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  action.onTap();
-                },
+            const SizedBox(height: DTSpacing.xs),
+            Text(
+              'Choose the record type that matches what happened.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-            ],
+            ),
+            const SizedBox(height: DTSpacing.md),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 280 ? 2 : 1;
+                final spacing = columns == 1 ? 0.0 : DTSpacing.md;
+                final tileWidth =
+                    (constraints.maxWidth - spacing * (columns - 1)) / columns;
+                return Wrap(
+                  spacing: DTSpacing.md,
+                  runSpacing: DTSpacing.md,
+                  children: [
+                    for (final action in actions)
+                      SizedBox(
+                        width: tileWidth,
+                        child: _ActionTile(
+                          item: action,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            action.onTap();
+                          },
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -289,6 +325,7 @@ class _ActionItem {
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.colorBuilder,
     required this.onTap,
   });
 
@@ -296,6 +333,7 @@ class _ActionItem {
   final IconData icon;
   final String title;
   final String subtitle;
+  final Color Function(BuildContext context) colorBuilder;
   final VoidCallback onTap;
 }
 
@@ -309,69 +347,60 @@ class _ActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final accent = item.colorBuilder(context);
     return Semantics(
       button: true,
       label: item.title,
       child: Material(
         key: item.key,
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.42),
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.46),
         borderRadius: DTRadii.cardRadius,
         child: InkWell(
           borderRadius: DTRadii.cardRadius,
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: DTSpacing.md,
-              vertical: 10,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: colors.primaryContainer.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(DTRadii.card),
-                  ),
-                  child: Icon(
-                    item.icon,
-                    color: colors.onPrimaryContainer,
-                    size: DTIconSizes.md,
-                  ),
-                ),
-                const SizedBox(width: DTSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+            padding: const EdgeInsets.all(DTSpacing.md),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 94),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      DTCategoryIcon(
+                        icon: item.icon,
+                        color: accent,
+                        size: 40,
+                        tooltip: item.title,
                       ),
-                      Text(
-                        item.subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+                      const Spacer(),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        color: colors.onSurfaceVariant,
+                        size: DTIconSizes.sm,
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: DTSpacing.sm),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: colors.onSurfaceVariant,
-                  size: DTIconSizes.md,
-                ),
-              ],
+                  const SizedBox(height: DTSpacing.sm),
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: DTSpacing.xs),
+                  Text(
+                    item.subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -198,6 +198,7 @@ void main() {
       await services.odometerService.recordManualReading(
         vehicleId: vehicle.id,
         odometer: 70000,
+        confirmLargeIncrease: true,
       );
 
       await services.refuelService.createRefuel(

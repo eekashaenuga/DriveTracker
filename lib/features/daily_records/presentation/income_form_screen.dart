@@ -8,8 +8,10 @@ import '../../../core/utilities/formatters.dart';
 import '../../../core/utilities/money.dart';
 import '../../../core/utilities/scaled_decimal.dart';
 import '../../../core/utilities/validation_exception.dart';
+import '../../../shared/widgets/dt_form_section.dart';
 import '../../../shared/widgets/dt_odometer_input.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
+import '../../../shared/widgets/odometer_confirmation_dialog.dart';
 import '../../attachments/domain/attachment.dart';
 import '../../attachments/presentation/attachment_panel.dart';
 import '../../odometer/domain/odometer_policy.dart';
@@ -40,6 +42,7 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
   Future<List<RecordCategory>>? _categoriesFuture;
   String? _formError;
   bool _didDefaultFromController = false;
+  int? _lastOdometer;
 
   bool get _isEditing => widget.income != null;
 
@@ -57,7 +60,9 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
         minFractionDigits: 2,
         maxFractionDigits: 2,
       );
-      _odometerController.text = income.odometer?.toString() ?? '';
+      _odometerController.text = income.odometer == null
+          ? ''
+          : DTFormatters.wholeNumber(income.odometer!);
       _sourceController.text = income.source ?? '';
       _notesController.text = income.notes ?? '';
     }
@@ -74,6 +79,7 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
     final controller = context.read<DriveTrackerController>();
     if (widget.income == null) {
       _vehicleId = controller.selectedVehicle?.id;
+      _lastOdometer = controller.currentOdometer;
     }
   }
 
@@ -92,7 +98,7 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
     final vehicles = controller.activeVehicles;
     final selectedVehicle = _vehicleForId(vehicles, _vehicleId);
     final theme = Theme.of(context);
-
+    final currencySymbol = MoneyAmount.defaultCurrency.symbol;
     return Scaffold(
       appBar: AppBar(title: Text(_isEditing ? 'Edit income' : 'Add income')),
       bottomNavigationBar: SafeArea(
@@ -148,7 +154,18 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
                     value == null ? 'Select a vehicle.' : null,
                 onChanged: _isEditing
                     ? null
-                    : (value) => setState(() => _vehicleId = value),
+                    : (value) async {
+                        setState(() => _vehicleId = value);
+                        if (value == null) {
+                          return;
+                        }
+                        final odometer = await context
+                            .read<DriveTrackerController>()
+                            .currentOdometerForVehicle(value);
+                        if (mounted) {
+                          setState(() => _lastOdometer = odometer);
+                        }
+                      },
               ),
               const SizedBox(height: DTSpacing.md),
               FutureBuilder<List<RecordCategory>>(
@@ -216,9 +233,9 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
                 ],
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Amount',
-                  prefixText: '£',
+                  prefixText: currencySymbol,
                 ),
                 validator: (value) => _validatePositiveMoney(value, 'Amount'),
               ),
@@ -229,27 +246,42 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
                 onChanged: (value) => setState(() => _eventDateTime = value),
               ),
               const SizedBox(height: DTSpacing.xl),
-              Text('Optional details', style: theme.textTheme.titleMedium),
-              const SizedBox(height: DTSpacing.md),
-              DTOdometerInput(
-                controller: _odometerController,
-                unitLabel: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
-                label: 'Odometer',
-                validator: _validateOptionalOdometer,
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                controller: _sourceController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Source'),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                controller: _notesController,
-                minLines: 3,
-                maxLines: 5,
-                decoration: const InputDecoration(labelText: 'Notes'),
+              DTFormSection(
+                title: 'Optional details',
+                icon: Icons.tune_rounded,
+                subtitle: 'Add source and mileage context for this income.',
+                children: [
+                  DTOdometerInput(
+                    controller: _odometerController,
+                    unitLabel: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                    label: 'Odometer',
+                    validator: _validateOptionalOdometer,
+                    helperText: _isEditing
+                        ? null
+                        : dtOdometerContextText(
+                            referenceOdometer: _lastOdometer,
+                            unit: selectedVehicle?.distanceUnit,
+                            enteredOdometer: dtParseOdometerInput(
+                              _odometerController.text,
+                            ),
+                          ),
+                    textInputAction: TextInputAction.next,
+                    onChanged: _isEditing ? null : (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  TextFormField(
+                    controller: _sourceController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(labelText: 'Source'),
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  TextFormField(
+                    controller: _notesController,
+                    minLines: 3,
+                    maxLines: 5,
+                    decoration: const InputDecoration(labelText: 'Notes'),
+                  ),
+                ],
               ),
               const SizedBox(height: DTSpacing.lg),
               if (_isEditing)
@@ -334,8 +366,14 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
             OdometerDecision.unusuallyLargeIncrease,
       );
     } on ValidationException catch (error) {
+      if (!mounted) {
+        return;
+      }
       setState(() => _formError = error.message);
     } catch (_) {
+      if (!mounted) {
+        return;
+      }
       setState(() => _formError = 'Could not save income.');
     }
   }
@@ -424,27 +462,19 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
   }
 
   Future<bool> _confirmAssessment(OdometerAssessment assessment) async {
-    final isHistorical = assessment.decision == OdometerDecision.belowCurrent;
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          isHistorical ? 'Save historical income?' : 'Confirm large increase',
-        ),
-        content: Text(assessment.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(isHistorical ? 'Save historical' : 'Confirm'),
-          ),
-        ],
-      ),
+    final vehicle = _vehicleForId(
+      context.read<DriveTrackerController>().activeVehicles,
+      _vehicleId,
     );
-    return result ?? false;
+    if (vehicle == null) {
+      return false;
+    }
+    return showOdometerConfirmationDialog(
+      context: context,
+      assessment: assessment,
+      unit: vehicle.distanceUnit,
+      historicalTitle: 'Save historical income?',
+    );
   }
 
   String? _validatePositiveMoney(String? value, String label) {

@@ -8,6 +8,7 @@ import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
 import '../../../shared/widgets/dt_odometer_input.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
+import '../../../shared/widgets/odometer_confirmation_dialog.dart';
 import '../domain/odometer_policy.dart';
 
 class UpdateOdometerScreen extends StatefulWidget {
@@ -175,27 +176,16 @@ class _UpdateOdometerScreenState extends State<UpdateOdometerScreen> {
   }
 
   Future<bool> _confirmAssessment(OdometerAssessment assessment) async {
-    final isHistorical = assessment.decision == OdometerDecision.belowCurrent;
-    final result = await showDialog<bool>(
+    final vehicle = context.read<DriveTrackerController>().selectedVehicle;
+    if (vehicle == null) {
+      return false;
+    }
+    return showOdometerConfirmationDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          isHistorical ? 'Save historical reading?' : 'Confirm large increase',
-        ),
-        content: Text(assessment.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(isHistorical ? 'Save historical' : 'Confirm'),
-          ),
-        ],
-      ),
+      assessment: assessment,
+      unit: vehicle.distanceUnit,
+      historicalTitle: 'Save historical reading?',
     );
-    return result ?? false;
   }
 
   String? _validateReading(String? value) {

@@ -9,8 +9,10 @@ import '../../../core/utilities/money.dart';
 import '../../../core/utilities/scaled_decimal.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
+import '../../../shared/widgets/dt_form_section.dart';
 import '../../../shared/widgets/dt_odometer_input.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
+import '../../../shared/widgets/odometer_confirmation_dialog.dart';
 import '../../attachments/domain/attachment.dart';
 import '../../attachments/presentation/attachment_panel.dart';
 import '../../odometer/domain/odometer_policy.dart';
@@ -46,6 +48,7 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
   final _itemNotesText = <String, String>{};
 
   String? _vehicleId;
+  int? _lastOdometer;
   late DateTime _eventDateTime;
   Future<List<MaintenanceItem>>? _itemsFuture;
   String? _formError;
@@ -61,7 +64,9 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
     _vehicleId = service?.record.vehicleId;
     if (service != null) {
       final record = service.record;
-      _odometerController.text = record.odometer?.toString() ?? '';
+      _odometerController.text = record.odometer == null
+          ? ''
+          : DTFormatters.wholeNumber(record.odometer!);
       _totalCostController.text = _moneyInputText(record.totalCostMinor);
       _garageController.text = record.garage ?? '';
       _notesController.text = record.notes ?? '';
@@ -97,8 +102,9 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
       _didDefaultFromController = true;
       _vehicleId ??= context.read<DriveTrackerController>().selectedVehicle?.id;
       final odometer = context.read<DriveTrackerController>().currentOdometer;
+      _lastOdometer = odometer;
       if (!_isEditing && odometer != null) {
-        _odometerController.text = odometer.toString();
+        _odometerController.text = DTFormatters.wholeNumber(odometer);
       }
     }
     _itemsFuture ??= _loadMaintenanceItems();
@@ -121,6 +127,7 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
     final controller = context.watch<DriveTrackerController>();
     final vehicles = controller.activeVehicles;
     final selectedVehicle = _vehicleForId(vehicles, _vehicleId);
+    final currencySymbol = MoneyAmount.defaultCurrency.symbol;
 
     if (vehicles.isEmpty) {
       return const Scaffold(
@@ -175,141 +182,175 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
           child: ListView(
             padding: const EdgeInsets.all(DTSpacing.lg),
             children: [
-              DropdownButtonFormField<String>(
-                key: const Key('serviceVehicleField'),
-                initialValue: selectedVehicle?.id,
-                decoration: const InputDecoration(labelText: 'Vehicle'),
-                items: [
-                  for (final vehicle in vehicles)
-                    DropdownMenuItem(
-                      value: vehicle.id,
-                      child: Text(vehicle.name),
-                    ),
-                ],
-                validator: (value) =>
-                    value == null ? 'Select a vehicle.' : null,
-                onChanged: _isEditing
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _vehicleId = value;
-                          _selectedMaintenanceItemIds.clear();
-                          _itemsFuture = _loadMaintenanceItems();
-                        });
-                      },
-              ),
-              const SizedBox(height: DTSpacing.md),
-              _DateTimeTile(
-                label: 'Service date/time',
-                value: _eventDateTime,
-                onChanged: (value) => setState(() => _eventDateTime = value),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              DTOdometerInput(
-                fieldKey: const Key('serviceOdometerField'),
-                controller: _odometerController,
-                unitLabel: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
-                validator: _validateRequiredOdometer,
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('serviceTotalCostField'),
-                controller: _totalCostController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
-                ],
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Total cost',
-                  prefixText: '£',
-                ),
-                validator: _validateNonNegativeMoney,
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('serviceGarageField'),
-                controller: _garageController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Garage'),
-              ),
-              const SizedBox(height: DTSpacing.xl),
-              Text(
-                'Service items',
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: DTSpacing.sm),
-              FutureBuilder<List<MaintenanceItem>>(
-                future: _itemsFuture,
-                builder: (context, snapshot) {
-                  final items = snapshot.data;
-                  if (items == null) {
-                    return const Padding(
-                      key: Key('serviceItemsLoading'),
-                      padding: EdgeInsets.symmetric(vertical: DTSpacing.lg),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  if (items.isEmpty) {
-                    return const Padding(
-                      key: Key('serviceItemsEmpty'),
-                      padding: EdgeInsets.only(bottom: DTSpacing.md),
-                      child: Text(
-                        'No tracked maintenance items yet. Add an untracked service line below.',
-                      ),
-                    );
-                  }
-                  return Column(
-                    key: const Key('serviceItemsLoaded'),
-                    children: [
-                      for (final item in items)
-                        _trackedServiceItemTile(
-                          item,
-                          selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+              DTFormSection(
+                title: 'Record',
+                icon: Icons.receipt_long_rounded,
+                subtitle: 'Vehicle, date, mileage and garage for this service.',
+                children: [
+                  DropdownButtonFormField<String>(
+                    key: const Key('serviceVehicleField'),
+                    initialValue: selectedVehicle?.id,
+                    decoration: const InputDecoration(labelText: 'Vehicle'),
+                    items: [
+                      for (final vehicle in vehicles)
+                        DropdownMenuItem(
+                          value: vehicle.id,
+                          child: Text(vehicle.name),
                         ),
                     ],
-                  );
-                },
-              ),
-              const SizedBox(height: DTSpacing.lg),
-              TextFormField(
-                key: const Key('customServiceItemNameField'),
-                controller: _customItemController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Untracked service line',
-                ),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('customServiceItemCostField'),
-                controller: _customItemCostController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
+                    validator: (value) =>
+                        value == null ? 'Select a vehicle.' : null,
+                    onChanged: _isEditing
+                        ? null
+                        : (value) async {
+                            setState(() {
+                              _vehicleId = value;
+                              _selectedMaintenanceItemIds.clear();
+                              _itemsFuture = _loadMaintenanceItems();
+                            });
+                            if (value == null) {
+                              return;
+                            }
+                            final odometer = await context
+                                .read<DriveTrackerController>()
+                                .currentOdometerForVehicle(value);
+                            if (mounted) {
+                              setState(() {
+                                _lastOdometer = odometer;
+                                if (odometer != null) {
+                                  _odometerController.text =
+                                      DTFormatters.wholeNumber(odometer);
+                                }
+                              });
+                            }
+                          },
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  _DateTimeTile(
+                    label: 'Service date/time',
+                    value: _eventDateTime,
+                    onChanged: (value) =>
+                        setState(() => _eventDateTime = value),
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  DTOdometerInput(
+                    fieldKey: const Key('serviceOdometerField'),
+                    controller: _odometerController,
+                    unitLabel: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                    validator: _validateRequiredOdometer,
+                    helperText: _isEditing
+                        ? null
+                        : dtOdometerContextText(
+                            referenceOdometer: _lastOdometer,
+                            unit: selectedVehicle?.distanceUnit,
+                            enteredOdometer: dtParseOdometerInput(
+                              _odometerController.text,
+                            ),
+                          ),
+                    textInputAction: TextInputAction.next,
+                    onChanged: _isEditing ? null : (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  TextFormField(
+                    key: const Key('serviceTotalCostField'),
+                    controller: _totalCostController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
+                    ],
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Total cost',
+                      prefixText: currencySymbol,
+                    ),
+                    validator: _validateNonNegativeMoney,
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  TextFormField(
+                    key: const Key('serviceGarageField'),
+                    controller: _garageController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(labelText: 'Garage'),
+                  ),
                 ],
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Untracked allocated cost',
-                  prefixText: '£',
-                ),
-                validator: _validateOptionalMoney,
               ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('customServiceItemNotesField'),
-                controller: _customItemNotesController,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Untracked item notes',
-                ),
+              const SizedBox(height: DTSpacing.xl),
+              DTFormSection(
+                title: 'Service items',
+                icon: Icons.build_circle_outlined,
+                subtitle:
+                    'Tick tracked maintenance items or add a one-off item.',
+                children: [
+                  FutureBuilder<List<MaintenanceItem>>(
+                    future: _itemsFuture,
+                    builder: (context, snapshot) {
+                      final items = snapshot.data;
+                      if (items == null) {
+                        return const Padding(
+                          key: Key('serviceItemsLoading'),
+                          padding: EdgeInsets.symmetric(vertical: DTSpacing.lg),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      if (items.isEmpty) {
+                        return const Padding(
+                          key: Key('serviceItemsEmpty'),
+                          padding: EdgeInsets.only(bottom: DTSpacing.md),
+                          child: Text(
+                            'No tracked maintenance items yet. Add an additional service item below.',
+                          ),
+                        );
+                      }
+                      return Column(
+                        key: const Key('serviceItemsLoaded'),
+                        children: [
+                          for (final item in items)
+                            _trackedServiceItemTile(
+                              item,
+                              selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                              currencySymbol,
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: DTSpacing.lg),
+                  TextFormField(
+                    key: const Key('customServiceItemNameField'),
+                    controller: _customItemController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Additional service item',
+                    ),
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  TextFormField(
+                    key: const Key('customServiceItemCostField'),
+                    controller: _customItemCostController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
+                    ],
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Item cost',
+                      prefixText: currencySymbol,
+                    ),
+                    validator: _validateOptionalMoney,
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  TextFormField(
+                    key: const Key('customServiceItemNotesField'),
+                    controller: _customItemNotesController,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: const InputDecoration(labelText: 'Item notes'),
+                  ),
+                ],
               ),
               const SizedBox(height: DTSpacing.md),
               TextFormField(
@@ -346,7 +387,11 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
     );
   }
 
-  Widget _trackedServiceItemTile(MaintenanceItem item, String unitLabel) {
+  Widget _trackedServiceItemTile(
+    MaintenanceItem item,
+    String unitLabel,
+    String currencySymbol,
+  ) {
     final selected = _selectedMaintenanceItemIds.contains(item.id);
     return Column(
       children: [
@@ -375,9 +420,9 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
             ],
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Allocated cost',
-              prefixText: '£',
+              prefixText: currencySymbol,
             ),
             validator: _validateOptionalMoney,
             onChanged: (value) => _itemCostText[item.id] = value,
@@ -591,27 +636,19 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
   }
 
   Future<bool> _confirmAssessment(OdometerAssessment assessment) async {
-    final isHistorical = assessment.decision == OdometerDecision.belowCurrent;
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          isHistorical ? 'Save historical service?' : 'Confirm large increase',
-        ),
-        content: Text(assessment.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(isHistorical ? 'Save historical' : 'Confirm'),
-          ),
-        ],
-      ),
+    final vehicle = _vehicleForId(
+      context.read<DriveTrackerController>().activeVehicles,
+      _vehicleId,
     );
-    return result ?? false;
+    if (vehicle == null) {
+      return false;
+    }
+    return showOdometerConfirmationDialog(
+      context: context,
+      assessment: assessment,
+      unit: vehicle.distanceUnit,
+      historicalTitle: 'Save historical service?',
+    );
   }
 
   int? _parseInt(String value) {

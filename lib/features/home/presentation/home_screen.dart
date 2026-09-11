@@ -7,8 +7,10 @@ import '../../../app/theme/dt_tokens.dart';
 import '../../../core/utilities/formatters.dart';
 import '../../../shared/widgets/dt_activity_row.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
+import '../../../shared/widgets/dt_metric_card.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
 import '../../../shared/widgets/dt_section_header.dart';
+import '../../../shared/widgets/dt_status_badge.dart';
 import '../../daily_records/domain/daily_activity.dart';
 import '../../daily_records/domain/fuel_economy_calculator.dart';
 import '../../daily_records/domain/monthly_spending.dart';
@@ -72,6 +74,8 @@ class _HomeDashboardContent extends StatelessWidget {
       children: [
         _VehicleHero(
           vehicle: vehicle,
+          currentOdometer: controller.currentOdometer,
+          unit: unit,
           hasMultipleVehicles: controller.activeVehicles.length > 1,
           onTap: () => showVehicleSelectorSheet(context),
         ),
@@ -124,11 +128,15 @@ class _HomeDashboardContent extends StatelessWidget {
 class _VehicleHero extends StatelessWidget {
   const _VehicleHero({
     required this.vehicle,
+    required this.currentOdometer,
+    required this.unit,
     required this.hasMultipleVehicles,
     required this.onTap,
   });
 
   final Vehicle vehicle;
+  final int? currentOdometer;
+  final DistanceUnit unit;
   final bool hasMultipleVehicles;
   final VoidCallback onTap;
 
@@ -138,135 +146,247 @@ class _VehicleHero extends StatelessWidget {
     final colors = theme.colorScheme;
     final switchLabel = hasMultipleVehicles ? 'Switch' : 'Manage';
 
+    final odometerLabel = DTFormatters.odometer(currentOdometer, unit);
+
     return Semantics(
       button: true,
       label:
-          'Selected vehicle ${vehicle.name}, ${vehicle.description}, ${vehicle.registrationLabel}',
+          'Selected vehicle ${vehicle.name}, ${vehicle.description}, ${vehicle.registrationLabel}, current odometer $odometerLabel',
       child: Material(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: DTRadii.cardRadius,
+        color: Colors.transparent,
+        borderRadius: DTRadii.heroRadius,
         child: InkWell(
           key: const Key('selectedVehicleButton'),
           onTap: onTap,
-          borderRadius: DTRadii.cardRadius,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              DTSpacing.lg,
-              DTSpacing.md,
-              DTSpacing.md,
-              DTSpacing.md,
+          borderRadius: DTRadii.heroRadius,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerHighest.withValues(
+                alpha: colors.brightness == Brightness.dark ? 0.58 : 0.72,
+              ),
+              borderRadius: DTRadii.heroRadius,
+              border: Border.all(
+                color: colors.outlineVariant.withValues(alpha: 0.55),
+              ),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: 54,
-                  height: 54,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: colors.primaryContainer.withValues(alpha: 0.68),
-                    borderRadius: BorderRadius.circular(DTRadii.card),
-                  ),
-                  child: Icon(
-                    Icons.directions_car_filled_rounded,
-                    color: colors.onPrimaryContainer,
-                    size: 30,
-                  ),
-                ),
-                const SizedBox(width: DTSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Padding(
+              padding: const EdgeInsets.all(DTSpacing.lg),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 340;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Flexible(
-                            child: Text(
-                              'DriveTracker',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: colors.primary,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'DriveTracker',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: colors.primary,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                Text(
+                                  'Home',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: DTSpacing.xs),
+                                Text(
+                                  vehicle.name,
+                                  maxLines: compact ? 2 : 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0,
+                                      ),
+                                ),
+                                const SizedBox(height: DTSpacing.xs),
+                                Text(
+                                  _joinDisplay([
+                                    vehicle.description,
+                                    vehicle.registrationLabel,
+                                  ]),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: DTSpacing.xs),
-                          Text(
-                            'Home',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colors.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
+                          const SizedBox(width: DTSpacing.md),
+                          Tooltip(
+                            message: hasMultipleVehicles
+                                ? 'Switch vehicle'
+                                : 'Vehicle options',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: DTSpacing.sm,
+                                vertical: DTSpacing.xs,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.surface.withValues(alpha: 0.68),
+                                borderRadius: BorderRadius.circular(
+                                  DTRadii.card,
+                                ),
+                                border: Border.all(
+                                  color: colors.outlineVariant,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    switchLabel,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: colors.onSurfaceVariant,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Icon(
+                                    hasMultipleVehicles
+                                        ? Icons.keyboard_arrow_down_rounded
+                                        : Icons.more_horiz_rounded,
+                                    size: DTIconSizes.sm,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        vehicle.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: DTSpacing.xs),
-                      Text(
-                        _joinDisplay([
-                          vehicle.description,
-                          vehicle.registrationLabel,
-                        ]),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      const SizedBox(height: DTSpacing.lg),
+                      Row(
+                        children: [
+                          _VehicleSilhouette(accent: colors.primary),
+                          const SizedBox(width: DTSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Current odometer',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                _OdometerText(
+                                  value: odometerLabel,
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(width: DTSpacing.sm),
-                Tooltip(
-                  message: hasMultipleVehicles
-                      ? 'Switch vehicle'
-                      : 'Vehicle options',
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: DTSpacing.sm,
-                      vertical: DTSpacing.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.surface.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(DTRadii.card),
-                      border: Border.all(color: colors.outlineVariant),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          switchLabel,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: colors.onSurfaceVariant,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        Icon(
-                          hasMultipleVehicles
-                              ? Icons.keyboard_arrow_down_rounded
-                              : Icons.more_horiz_rounded,
-                          size: DTIconSizes.sm,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+                  );
+                },
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _VehicleSilhouette extends StatelessWidget {
+  const _VehicleSilhouette({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: 76,
+      height: 48,
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.14),
+        borderRadius: DTRadii.controlRadius,
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            bottom: 16,
+            left: 16,
+            right: 14,
+            child: Container(
+              height: 16,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.28),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(14),
+                  bottom: Radius.circular(7),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 12,
+            left: 11,
+            right: 10,
+            child: Container(
+              height: 12,
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 8,
+            left: 18,
+            child: _VehicleWheel(color: colors.surface),
+          ),
+          Positioned(
+            bottom: 8,
+            right: 18,
+            child: _VehicleWheel(color: colors.surface),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VehicleWheel extends StatelessWidget {
+  const _VehicleWheel({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
@@ -290,7 +410,6 @@ class _OdometerHero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.speed_rounded,
@@ -298,11 +417,15 @@ class _OdometerHero extends StatelessWidget {
               color: colors.primary,
             ),
             const SizedBox(width: DTSpacing.xs),
-            Text(
-              'Current odometer',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colors.onSurfaceVariant,
-                fontWeight: FontWeight.w800,
+            Expanded(
+              child: Text(
+                'Current odometer',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colors.onSurfaceVariant,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],
@@ -416,6 +539,8 @@ class _MetricStrip extends StatelessWidget {
         label: 'This month',
         value: DTFormatters.moneyMinor(monthSpendMinor),
         support: 'Fuel + costs',
+        colorBuilder: DTAccents.expense,
+        onTap: AppNavigation.openHistory,
       ),
       _MetricData(
         key: const Key('homeFuelPriceMetric'),
@@ -425,6 +550,7 @@ class _MetricStrip extends StatelessWidget {
             ? 'No fuel data'
             : DTFormatters.fuelPrice(latestFuelPriceMicrosPerLitre),
         support: 'Latest price',
+        colorBuilder: DTAccents.fuel,
       ),
       _MetricData(
         key: const Key('homeFuelEconomyMetric'),
@@ -436,6 +562,7 @@ class _MetricStrip extends StatelessWidget {
         support: latestFuelEconomyInterval == null
             ? 'Full-to-full needed'
             : 'Full-to-full MPG',
+        colorBuilder: DTAccents.odometer,
       ),
     ];
 
@@ -477,6 +604,8 @@ class _MetricData {
     required this.label,
     required this.value,
     required this.support,
+    required this.colorBuilder,
+    this.onTap,
   });
 
   final Key key;
@@ -484,6 +613,8 @@ class _MetricData {
   final String label;
   final String value;
   final String support;
+  final Color Function(BuildContext context) colorBuilder;
+  final void Function(BuildContext context)? onTap;
 }
 
 class _MetricTile extends StatelessWidget {
@@ -493,58 +624,18 @@ class _MetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     return Semantics(
       container: true,
       label: '${data.label}: ${data.value}',
-      child: Material(
+      child: KeyedSubtree(
         key: data.key,
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.42),
-        borderRadius: DTRadii.cardRadius,
-        child: Padding(
-          padding: const EdgeInsets.all(DTSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Icon(data.icon, size: DTIconSizes.sm, color: colors.primary),
-                  const SizedBox(width: DTSpacing.xs),
-                  Expanded(
-                    child: Text(
-                      data.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: colors.onSurfaceVariant,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: DTSpacing.sm),
-              Text(
-                data.value,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                data.support,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+        child: DTMetricCard(
+          label: data.label,
+          value: data.value,
+          icon: data.icon,
+          accentColor: data.colorBuilder(context),
+          supportingText: data.support,
+          onTap: data.onTap == null ? null : () => data.onTap!(context),
         ),
       ),
     );
@@ -636,7 +727,6 @@ class _MaintenanceAttentionTile extends StatelessWidget {
           ? subtitle
           : '${(progress * 100).round()} percent through interval',
       child: Material(
-        key: const Key('homeMaintenanceAttentionTile'),
         color: colors.surfaceContainerHighest.withValues(alpha: 0.42),
         borderRadius: DTRadii.cardRadius,
         child: InkWell(
@@ -656,6 +746,7 @@ class _MaintenanceAttentionTile extends StatelessWidget {
                     const SizedBox(width: DTSpacing.sm),
                     Expanded(
                       child: Text(
+                        key: const Key('homeMaintenanceAttentionTile'),
                         reminder.item.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -665,9 +756,13 @@ class _MaintenanceAttentionTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: DTSpacing.sm),
-                    _StatusPill(
-                      label: reminder.state.label,
-                      color: statusColor,
+                    Flexible(
+                      child: DTStatusBadge(
+                        label: reminder.state.label,
+                        color: statusColor,
+                        icon: _maintenanceIcon(reminder.state),
+                        compact: true,
+                      ),
                     ),
                   ],
                 ),
@@ -698,38 +793,6 @@ class _MaintenanceAttentionTile extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: DTSpacing.sm,
-        vertical: DTSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(DTRadii.card),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -969,7 +1032,15 @@ class _RecentActivityList extends StatelessWidget {
       return const Padding(
         key: Key('homeRecentActivityEmpty'),
         padding: EdgeInsets.only(top: DTSpacing.md),
-        child: Text('No activity yet. Use + to add fuel, costs or service.'),
+        child: Material(
+          color: Colors.transparent,
+          child: Padding(
+            padding: EdgeInsets.all(DTSpacing.md),
+            child: Text(
+              'No activity yet. Use + to add fuel, costs or service.',
+            ),
+          ),
+        ),
       );
     }
 
@@ -1001,6 +1072,7 @@ class _ActivityTile extends StatelessWidget {
       title: activity.title,
       subtitle: _activitySubtitle(activity, unit, now),
       trailing: _activityTrailing(context, activity),
+      accentColor: _activityColor(context, activity.type),
     );
     final canOpen =
         activity.type != DailyActivityType.odometer &&
@@ -1162,6 +1234,17 @@ Color _maintenanceColor(BuildContext context, MaintenanceReminderState state) {
     MaintenanceReminderState.dueSoon => colors.tertiary,
     MaintenanceReminderState.upcoming => colors.primary,
     MaintenanceReminderState.normal => colors.onSurfaceVariant,
+  };
+}
+
+Color _activityColor(BuildContext context, DailyActivityType type) {
+  return switch (type) {
+    DailyActivityType.refuel => DTAccents.fuel(context),
+    DailyActivityType.expense => DTAccents.expense(context),
+    DailyActivityType.income => DTAccents.income(context),
+    DailyActivityType.service => DTAccents.service(context),
+    DailyActivityType.odometer => DTAccents.odometer(context),
+    DailyActivityType.all => DTAccents.neutral(context),
   };
 }
 

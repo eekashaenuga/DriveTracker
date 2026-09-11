@@ -565,21 +565,95 @@ class _ModeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SegmentedButton<_CalculatorMode>(
-        key: const Key('fuelCalculatorModeSelector'),
-        selected: {selected},
-        showSelectedIcon: false,
-        segments: [
-          for (final mode in _CalculatorMode.values)
-            ButtonSegment(
-              value: mode,
-              icon: Icon(mode.icon),
-              label: Text(mode.label),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 560
+            ? _CalculatorMode.values.length
+            : constraints.maxWidth >= 300
+            ? 2
+            : 1;
+        final gaps = DTSpacing.sm * (columns - 1);
+        final width = (constraints.maxWidth - gaps) / columns;
+
+        return Wrap(
+          key: const Key('fuelCalculatorModeSelector'),
+          spacing: DTSpacing.sm,
+          runSpacing: DTSpacing.sm,
+          children: [
+            for (final mode in _CalculatorMode.values)
+              SizedBox(
+                width: width,
+                child: _ModeOption(
+                  mode: mode,
+                  selected: mode == selected,
+                  onSelected: () => onChanged(mode),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ModeOption extends StatelessWidget {
+  const _ModeOption({
+    required this.mode,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final _CalculatorMode mode;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final foreground = selected ? colors.onSecondaryContainer : colors.primary;
+    final background = selected
+        ? colors.secondaryContainer
+        : colors.surfaceContainerHighest.withValues(alpha: 0.52);
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: mode.label,
+      child: Material(
+        color: background,
+        borderRadius: DTRadii.controlRadius,
+        child: InkWell(
+          onTap: onSelected,
+          borderRadius: DTRadii.controlRadius,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 52),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: DTSpacing.sm,
+                vertical: DTSpacing.sm,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(mode.icon, size: DTIconSizes.sm, color: foreground),
+                  const SizedBox(height: DTSpacing.xs),
+                  Text(
+                    mode.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: foreground,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
             ),
-        ],
-        onSelectionChanged: (selection) => onChanged(selection.first),
+          ),
+        ),
       ),
     );
   }
@@ -640,7 +714,7 @@ class _TripCostTool extends StatelessWidget {
               fieldKey: const Key('tripFuelPriceField'),
               controller: priceController,
               label: 'Fuel price',
-              prefix: '£',
+              prefix: MoneyAmount.defaultCurrency.symbol,
               suffix: '/L',
             ),
           ],
@@ -762,7 +836,7 @@ class _CostSharingTool extends StatelessWidget {
                 fieldKey: const Key('shareFuelPriceField'),
                 controller: priceController,
                 label: 'Fuel price',
-                prefix: '£',
+                prefix: MoneyAmount.defaultCurrency.symbol,
                 suffix: '/L',
               ),
               _NumberField(
@@ -779,7 +853,7 @@ class _CostSharingTool extends StatelessWidget {
                 fieldKey: const Key('shareKnownCostField'),
                 controller: knownCostController,
                 label: 'Total fuel cost',
-                prefix: '£',
+                prefix: MoneyAmount.defaultCurrency.symbol,
               ),
               _NumberField(
                 fieldKey: const Key('sharePeopleField'),
@@ -959,20 +1033,20 @@ class _PriceComparisonTool extends StatelessWidget {
               fieldKey: const Key('comparisonStationAPriceField'),
               controller: stationAPriceController,
               label: 'Station A price',
-              prefix: '£',
+              prefix: MoneyAmount.defaultCurrency.symbol,
               suffix: '/L',
             ),
             _NumberField(
               fieldKey: const Key('comparisonStationBPriceField'),
               controller: stationBPriceController,
               label: 'Station B price',
-              prefix: '£',
+              prefix: MoneyAmount.defaultCurrency.symbol,
               suffix: '/L',
             ),
             _NumberField(
               fieldKey: const Key('comparisonExtraDistanceField'),
               controller: extraDistanceController,
-              label: 'Additional round-trip distance',
+              label: 'Extra round trip',
               suffix: distanceUnit.shortLabel,
             ),
             _DistanceUnitField(

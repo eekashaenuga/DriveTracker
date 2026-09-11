@@ -33,11 +33,31 @@ class VehicleRepository {
     String vehicleId,
     DateTime updatedAt, {
     sqflite.DatabaseExecutor? executor,
+  }) {
+    return setArchived(vehicleId, true, updatedAt, executor: executor);
+  }
+
+  Future<void> restore(
+    String vehicleId,
+    DateTime updatedAt, {
+    sqflite.DatabaseExecutor? executor,
+  }) {
+    return setArchived(vehicleId, false, updatedAt, executor: executor);
+  }
+
+  Future<void> setArchived(
+    String vehicleId,
+    bool isArchived,
+    DateTime updatedAt, {
+    sqflite.DatabaseExecutor? executor,
   }) async {
     final db = await _executor(executor);
     await db.update(
       'vehicles',
-      {'is_archived': 1, 'updated_at': updatedAt.toUtc().toIso8601String()},
+      {
+        'is_archived': isArchived ? 1 : 0,
+        'updated_at': updatedAt.toUtc().toIso8601String(),
+      },
       where: 'id = ?',
       whereArgs: [vehicleId],
     );

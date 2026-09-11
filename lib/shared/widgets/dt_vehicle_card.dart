@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/dt_tokens.dart';
 import '../../features/vehicles/domain/vehicle.dart';
+import 'dt_category_icon.dart';
+import 'dt_status_badge.dart';
 
 class DTVehicleCard extends StatelessWidget {
   const DTVehicleCard({
@@ -35,11 +37,11 @@ class DTVehicleCard extends StatelessWidget {
           padding: const EdgeInsets.all(DTSpacing.lg),
           child: Row(
             children: [
-              Icon(
-                Icons.directions_car_rounded,
+              DTCategoryIcon(
+                icon: Icons.directions_car_rounded,
                 color: isSelected
                     ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurfaceVariant,
+                    : DTAccents.odometer(context),
               ),
               const SizedBox(width: DTSpacing.md),
               Expanded(
@@ -60,10 +62,11 @@ class DTVehicleCard extends StatelessWidget {
                         ),
                         if (isSelected) ...[
                           const SizedBox(width: DTSpacing.sm),
-                          Icon(
-                            Icons.check_circle_rounded,
+                          DTStatusBadge(
+                            label: 'Selected',
                             color: theme.colorScheme.primary,
-                            size: DTIconSizes.sm,
+                            icon: Icons.check_circle_rounded,
+                            compact: true,
                           ),
                         ],
                       ],

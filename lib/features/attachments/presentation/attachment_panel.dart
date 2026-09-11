@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../shared/widgets/dt_category_icon.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
+import '../../../shared/widgets/dt_status_badge.dart';
 import '../domain/attachment.dart';
 
 class AttachmentPanel extends StatefulWidget {
@@ -236,44 +238,88 @@ class _AttachmentTile extends StatelessWidget {
       ),
       builder: (context, snapshot) {
         final exists = snapshot.data ?? true;
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: CircleAvatar(
-            backgroundColor: colors.primaryContainer.withValues(alpha: 0.75),
-            foregroundColor: colors.onPrimaryContainer,
-            child: Icon(_iconFor(attachment)),
-          ),
-          title: Text(
-            attachment.fileName,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            [
-              _sizeLabel(attachment.fileSize),
-              if (!exists) 'File unavailable',
-            ].where((part) => part.isNotEmpty).join(' / '),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: exists ? colors.onSurfaceVariant : colors.error,
+        final accent = exists ? _accentFor(context, attachment) : colors.error;
+        return Padding(
+          padding: const EdgeInsets.only(top: DTSpacing.sm),
+          child: Material(
+            color: colors.surface.withValues(alpha: 0.48),
+            borderRadius: DTRadii.cardRadius,
+            child: InkWell(
+              borderRadius: DTRadii.cardRadius,
+              onTap: onOpen,
+              child: Padding(
+                padding: const EdgeInsets.all(DTSpacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    DTCategoryIcon(
+                      icon: _iconFor(attachment),
+                      color: accent,
+                      tooltip: _fileTypeLabel(attachment),
+                    ),
+                    const SizedBox(width: DTSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            attachment.fileName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: DTSpacing.xs),
+                          Wrap(
+                            spacing: DTSpacing.sm,
+                            runSpacing: DTSpacing.xs,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                [
+                                  _fileTypeLabel(attachment),
+                                  _sizeLabel(attachment.fileSize),
+                                ].where((part) => part.isNotEmpty).join(' / '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                ),
+                              ),
+                              if (!exists)
+                                DTStatusBadge(
+                                  label: 'File unavailable',
+                                  color: colors.error,
+                                  icon: Icons.error_outline_rounded,
+                                  compact: true,
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: DTSpacing.sm),
+                    Wrap(
+                      spacing: DTSpacing.xs,
+                      children: [
+                        IconButton(
+                          tooltip: 'Open ${attachment.fileName}',
+                          onPressed: onOpen,
+                          icon: const Icon(Icons.open_in_new_rounded),
+                        ),
+                        IconButton(
+                          tooltip: 'Remove ${attachment.fileName}',
+                          onPressed: onRemove,
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          onTap: onOpen,
-          trailing: Wrap(
-            spacing: DTSpacing.xs,
-            children: [
-              IconButton(
-                tooltip: 'Open ${attachment.fileName}',
-                onPressed: onOpen,
-                icon: const Icon(Icons.open_in_new_rounded),
-              ),
-              IconButton(
-                tooltip: 'Remove ${attachment.fileName}',
-                onPressed: onRemove,
-                icon: const Icon(Icons.delete_outline_rounded),
-              ),
-            ],
           ),
         );
       },
@@ -285,6 +331,22 @@ class _AttachmentTile extends StatelessWidget {
       'pdf' => Icons.picture_as_pdf_rounded,
       'png' || 'jpg' || 'jpeg' => Icons.image_rounded,
       _ => Icons.insert_drive_file_rounded,
+    };
+  }
+
+  Color _accentFor(BuildContext context, Attachment attachment) {
+    return switch (attachment.extension) {
+      'pdf' => DTAccents.documents(context),
+      'png' || 'jpg' || 'jpeg' => DTAccents.income(context),
+      _ => DTAccents.storage(context),
+    };
+  }
+
+  String _fileTypeLabel(Attachment attachment) {
+    return switch (attachment.extension) {
+      'pdf' => 'PDF',
+      'png' || 'jpg' || 'jpeg' => 'Image',
+      _ => 'File',
     };
   }
 

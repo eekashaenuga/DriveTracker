@@ -29,6 +29,23 @@ class OdometerRepository {
     );
   }
 
+  Future<OdometerEntry?> getById(
+    String id, {
+    sqflite.DatabaseExecutor? executor,
+  }) async {
+    final db = await _executor(executor);
+    final rows = await db.query(
+      'odometer_entries',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    return OdometerEntry.fromMap(rows.first);
+  }
+
   Future<OdometerEntry?> getBySource(
     OdometerSourceType sourceType,
     String sourceRecordId, {

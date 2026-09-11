@@ -20,8 +20,11 @@ import '../../features/maintenance/presentation/maintenance_item_details_screen.
 import '../../features/maintenance/presentation/maintenance_item_form_screen.dart';
 import '../../features/maintenance/presentation/maintenance_screen.dart';
 import '../../features/maintenance/presentation/service_form_screen.dart';
+import '../../features/odometer/domain/odometer_entry.dart';
+import '../../features/odometer/presentation/odometer_entry_form_screen.dart';
 import '../../features/odometer/presentation/update_odometer_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/settings/presentation/vehicle_units_screen.dart';
 import '../../features/vehicles/domain/vehicle.dart';
 import '../../features/vehicles/presentation/vehicle_details_screen.dart';
 import '../../features/vehicles/presentation/vehicle_form_screen.dart';
@@ -68,6 +71,17 @@ class AppNavigation {
   static Future<void> openUpdateOdometer(BuildContext context) {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const UpdateOdometerScreen()),
+    );
+  }
+
+  static Future<void> openEditOdometerEntry(
+    BuildContext context,
+    OdometerEntry entry,
+  ) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OdometerEntryFormScreen(entry: entry),
+      ),
     );
   }
 
@@ -202,6 +216,12 @@ class AppNavigation {
   static Future<void> openSettings(BuildContext context) {
     return Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen()));
+  }
+
+  static Future<void> openVehicleUnits(BuildContext context) {
+    return Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const VehicleUnitsScreen()));
   }
 
   static Future<void> openDataStorage(BuildContext context) {

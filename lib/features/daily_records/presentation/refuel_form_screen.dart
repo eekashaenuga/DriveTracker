@@ -9,7 +9,9 @@ import '../../../core/utilities/money.dart';
 import '../../../core/utilities/scaled_decimal.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_odometer_input.dart';
+import '../../../shared/widgets/dt_form_section.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
+import '../../../shared/widgets/odometer_confirmation_dialog.dart';
 import '../../attachments/domain/attachment.dart';
 import '../../attachments/presentation/attachment_panel.dart';
 import '../../odometer/domain/odometer_policy.dart';
@@ -49,6 +51,7 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
   var _syncingFuelFields = false;
   String? _formError;
   bool _didDefaultFromController = false;
+  int? _lastOdometer;
 
   bool get _isEditing => widget.refuel != null;
 
@@ -69,7 +72,7 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
       );
       _manualFields = [FuelEntryField.totalCost, FuelEntryField.volume];
       _calculatedField = FuelEntryField.unitPrice;
-      _odometerController.text = refuel.odometer.toString();
+      _odometerController.text = DTFormatters.wholeNumber(refuel.odometer);
       _totalCostController.text = ScaledDecimal.format(
         refuel.totalCostMinor,
         scale: MoneyAmount.defaultCurrency.minorScale,
@@ -106,8 +109,9 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
     _vehicleId = vehicle.id;
     _fuelType = vehicle.fuelType;
     final odometer = controller.currentOdometer;
+    _lastOdometer = odometer;
     if (odometer != null) {
-      _odometerController.text = odometer.toString();
+      _odometerController.text = DTFormatters.wholeNumber(odometer);
     }
   }
 
@@ -128,6 +132,7 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
     final vehicles = controller.activeVehicles;
     final selectedVehicle = _vehicleForId(vehicles, _vehicleId);
     final theme = Theme.of(context);
+    final currencySymbol = MoneyAmount.defaultCurrency.symbol;
 
     return Scaffold(
       appBar: AppBar(title: Text(_isEditing ? 'Edit refuel' : 'Add refuel')),
@@ -169,167 +174,202 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
           child: ListView(
             padding: const EdgeInsets.all(DTSpacing.lg),
             children: [
-              DropdownButtonFormField<String>(
-                key: const Key('refuelVehicleField'),
-                initialValue: selectedVehicle?.id,
-                decoration: const InputDecoration(labelText: 'Vehicle'),
-                items: [
-                  for (final vehicle in vehicles)
-                    DropdownMenuItem(
-                      value: vehicle.id,
-                      child: Text(vehicle.name),
-                    ),
+              DTFormSection(
+                title: 'Record',
+                icon: Icons.receipt_long_rounded,
+                subtitle: 'Vehicle, date and mileage for this refuel.',
+                children: [
+                  DropdownButtonFormField<String>(
+                    key: const Key('refuelVehicleField'),
+                    initialValue: selectedVehicle?.id,
+                    decoration: const InputDecoration(labelText: 'Vehicle'),
+                    items: [
+                      for (final vehicle in vehicles)
+                        DropdownMenuItem(
+                          value: vehicle.id,
+                          child: Text(vehicle.name),
+                        ),
+                    ],
+                    validator: (value) =>
+                        value == null ? 'Select a vehicle.' : null,
+                    onChanged: _isEditing
+                        ? null
+                        : (value) async {
+                            if (value == null) {
+                              return;
+                            }
+                            final vehicle = _vehicleForId(vehicles, value);
+                            setState(() {
+                              _vehicleId = value;
+                              if (vehicle != null) {
+                                _fuelType = vehicle.fuelType;
+                              }
+                            });
+                            final odometer = await context
+                                .read<DriveTrackerController>()
+                                .currentOdometerForVehicle(value);
+                            if (mounted) {
+                              setState(() {
+                                _lastOdometer = odometer;
+                                if (odometer != null) {
+                                  _odometerController.text =
+                                      DTFormatters.wholeNumber(odometer);
+                                }
+                              });
+                            }
+                          },
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  _DateTimeTile(
+                    label: 'Date/time',
+                    value: _eventDateTime,
+                    onChanged: (value) =>
+                        setState(() => _eventDateTime = value),
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  DTOdometerInput(
+                    fieldKey: const Key('refuelOdometerField'),
+                    controller: _odometerController,
+                    unitLabel: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                    validator: _validateRequiredOdometer,
+                    helperText: _isEditing
+                        ? null
+                        : dtOdometerContextText(
+                            referenceOdometer: _lastOdometer,
+                            unit: selectedVehicle?.distanceUnit,
+                            enteredOdometer: dtParseOdometerInput(
+                              _odometerController.text,
+                            ),
+                          ),
+                    textInputAction: TextInputAction.next,
+                    onChanged: _isEditing ? null : (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: DTSpacing.md),
+                  DropdownButtonFormField<FuelType>(
+                    key: const Key('refuelFuelTypeField'),
+                    initialValue: _fuelType,
+                    decoration: const InputDecoration(labelText: 'Fuel type'),
+                    items: [
+                      for (final type in FuelType.values)
+                        DropdownMenuItem(value: type, child: Text(type.label)),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _fuelType = value);
+                      }
+                    },
+                  ),
                 ],
-                validator: (value) =>
-                    value == null ? 'Select a vehicle.' : null,
-                onChanged: _isEditing
-                    ? null
-                    : (value) async {
-                        if (value == null) {
-                          return;
-                        }
-                        final vehicle = _vehicleForId(vehicles, value);
-                        setState(() {
-                          _vehicleId = value;
-                          if (vehicle != null) {
-                            _fuelType = vehicle.fuelType;
-                          }
-                        });
-                        final odometer = await context
-                            .read<DriveTrackerController>()
-                            .currentOdometerForVehicle(value);
-                        if (mounted && odometer != null) {
-                          _odometerController.text = odometer.toString();
-                        }
-                      },
-              ),
-              const SizedBox(height: DTSpacing.md),
-              _DateTimeTile(
-                label: 'Date/time',
-                value: _eventDateTime,
-                onChanged: (value) => setState(() => _eventDateTime = value),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              DTOdometerInput(
-                fieldKey: const Key('refuelOdometerField'),
-                controller: _odometerController,
-                unitLabel: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
-                validator: _validateRequiredOdometer,
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: DTSpacing.md),
-              DropdownButtonFormField<FuelType>(
-                key: const Key('refuelFuelTypeField'),
-                initialValue: _fuelType,
-                decoration: const InputDecoration(labelText: 'Fuel type'),
-                items: [
-                  for (final type in FuelType.values)
-                    DropdownMenuItem(value: type, child: Text(type.label)),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _fuelType = value);
-                  }
-                },
               ),
               const SizedBox(height: DTSpacing.xl),
-              Text('Fuel details', style: theme.textTheme.titleMedium),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('refuelTotalCostField'),
-                controller: _totalCostController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
-                ],
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Total cost',
-                  prefixText: '£',
-                ),
-                validator: (value) => _validatePositive(
-                  MoneyAmount.parseMinor(value ?? ''),
-                  'Total cost',
-                ),
-                onChanged: (_) => _onFuelFieldChanged(FuelEntryField.totalCost),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('refuelVolumeField'),
-                controller: _volumeController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                ],
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Fuel volume',
-                  suffixText: 'L',
-                ),
-                validator: (value) => _validatePositive(
-                  FuelNumbers.parseLitresToMillilitres(value ?? ''),
-                  'Fuel volume',
-                ),
-                onChanged: (_) => _onFuelFieldChanged(FuelEntryField.volume),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              SegmentedButton<_UnitPriceMode>(
-                selected: {_unitPriceMode},
-                segments: const [
-                  ButtonSegment(
-                    value: _UnitPriceMode.pencePerLitre,
-                    label: Text('p/L'),
-                    icon: Icon(Icons.local_gas_station_rounded),
+              DTFormSection(
+                title: 'Fuel details',
+                icon: Icons.local_gas_station_rounded,
+                subtitle: 'Enter any two values and DriveTracker calculates the third.',
+                children: [
+                  TextFormField(
+                    key: const Key('refuelTotalCostField'),
+                    controller: _totalCostController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
+                    ],
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Total cost',
+                      prefixText: currencySymbol,
+                    ),
+                    validator: (value) => _validatePositive(
+                      MoneyAmount.parseMinor(value ?? ''),
+                      'Total cost',
+                    ),
+                    onChanged: (_) =>
+                        _onFuelFieldChanged(FuelEntryField.totalCost),
                   ),
-                  ButtonSegment(
-                    value: _UnitPriceMode.poundsPerLitre,
-                    label: Text('£/L'),
-                    icon: Icon(Icons.payments_rounded),
+                  const SizedBox(height: DTSpacing.md),
+                  TextFormField(
+                    key: const Key('refuelVolumeField'),
+                    controller: _volumeController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Fuel volume',
+                      suffixText: 'L',
+                    ),
+                    validator: (value) => _validatePositive(
+                      FuelNumbers.parseLitresToMillilitres(value ?? ''),
+                      'Fuel volume',
+                    ),
+                    onChanged: (_) =>
+                        _onFuelFieldChanged(FuelEntryField.volume),
                   ),
-                ],
-                onSelectionChanged: (selection) {
-                  setState(() {
-                    _unitPriceMode = selection.first;
-                    _formatUnitPriceController();
-                  });
-                },
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('refuelUnitPriceField'),
-                controller: _unitPriceController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
-                ],
-                textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
-                  labelText: 'Unit price',
-                  suffixText: _unitPriceMode == _UnitPriceMode.pencePerLitre
-                      ? 'p/L'
-                      : '£/L',
-                ),
-                validator: (value) => _validatePositive(
-                  _parseUnitPrice(value ?? ''),
-                  'Unit price',
-                ),
-                onChanged: (_) => _onFuelFieldChanged(FuelEntryField.unitPrice),
-              ),
-              if (_calculatedField != null) ...[
-                const SizedBox(height: DTSpacing.sm),
-                Text(
-                  '${_labelForFuelField(_calculatedField!)} calculated from the other two values.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  const SizedBox(height: DTSpacing.md),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SegmentedButton<_UnitPriceMode>(
+                      selected: {_unitPriceMode},
+                      segments: [
+                        ButtonSegment(
+                          value: _UnitPriceMode.pencePerLitre,
+                          label: const Text('p/L'),
+                          icon: const Icon(Icons.local_gas_station_rounded),
+                        ),
+                        ButtonSegment(
+                          value: _UnitPriceMode.poundsPerLitre,
+                          label: Text('$currencySymbol/L'),
+                          icon: const Icon(Icons.payments_rounded),
+                        ),
+                      ],
+                      onSelectionChanged: (selection) {
+                        setState(() {
+                          _unitPriceMode = selection.first;
+                          _formatUnitPriceController();
+                        });
+                      },
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: DTSpacing.md),
+                  TextFormField(
+                    key: const Key('refuelUnitPriceField'),
+                    controller: _unitPriceController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
+                    ],
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Unit price',
+                      suffixText: _unitPriceMode == _UnitPriceMode.pencePerLitre
+                          ? 'p/L'
+                          : '$currencySymbol/L',
+                    ),
+                    validator: (value) => _validatePositive(
+                      _parseUnitPrice(value ?? ''),
+                      'Unit price',
+                    ),
+                    onChanged: (_) =>
+                        _onFuelFieldChanged(FuelEntryField.unitPrice),
+                  ),
+                  if (_calculatedField != null) ...[
+                    const SizedBox(height: DTSpacing.sm),
+                    Text(
+                      '${_labelForFuelField(_calculatedField!)} calculated from the other two values.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               const SizedBox(height: DTSpacing.lg),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -449,8 +489,14 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
             OdometerDecision.unusuallyLargeIncrease,
       );
     } on ValidationException catch (error) {
+      if (!mounted) {
+        return;
+      }
       setState(() => _formError = error.message);
     } catch (_) {
+      if (!mounted) {
+        return;
+      }
       setState(() => _formError = 'Could not save refuel.');
     }
   }
@@ -489,27 +535,19 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
   }
 
   Future<bool> _confirmAssessment(OdometerAssessment assessment) async {
-    final isHistorical = assessment.decision == OdometerDecision.belowCurrent;
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          isHistorical ? 'Save historical refuel?' : 'Confirm large increase',
-        ),
-        content: Text(assessment.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(isHistorical ? 'Save historical' : 'Confirm'),
-          ),
-        ],
-      ),
+    final vehicle = _vehicleForId(
+      context.read<DriveTrackerController>().activeVehicles,
+      _vehicleId,
     );
-    return result ?? false;
+    if (vehicle == null) {
+      return false;
+    }
+    return showOdometerConfirmationDialog(
+      context: context,
+      assessment: assessment,
+      unit: vehicle.distanceUnit,
+      historicalTitle: 'Save historical refuel?',
+    );
   }
 
   void _onFuelFieldChanged(FuelEntryField editedField) {
