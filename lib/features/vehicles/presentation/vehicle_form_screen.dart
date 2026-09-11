@@ -5,9 +5,11 @@ import 'package:provider/provider.dart';
 import '../../../app/app_controller.dart';
 import '../../../app/theme/dt_tokens.dart';
 import '../../../core/utilities/formatters.dart';
+import '../../../core/utilities/money.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_odometer_input.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
+import '../../vehicles/domain/distance_unit_conversion.dart';
 import '../../vehicles/domain/vehicle.dart';
 import '../../vehicles/domain/vehicle_draft.dart';
 
@@ -50,6 +52,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   void initState() {
     super.initState();
     final vehicle = widget.vehicle;
+    final purchaseMileage = vehicle?.purchaseMileage;
     _nameController = TextEditingController(text: vehicle?.name ?? '');
     _makeController = TextEditingController(text: vehicle?.make ?? '');
     _modelController = TextEditingController(text: vehicle?.model ?? '');
@@ -68,7 +71,9 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     _vinController = TextEditingController(text: vehicle?.vin ?? '');
     _colourController = TextEditingController(text: vehicle?.colour ?? '');
     _purchaseMileageController = TextEditingController(
-      text: vehicle?.purchaseMileage?.toString() ?? '',
+      text: purchaseMileage == null
+          ? ''
+          : DTFormatters.wholeNumber(purchaseMileage),
     );
     _purchasePriceController = TextEditingController(
       text: vehicle?.purchasePrice?.toStringAsFixed(2) ?? '',
@@ -104,6 +109,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   Widget build(BuildContext context) {
     final controller = context.watch<DriveTrackerController>();
     final theme = Theme.of(context);
+    final currencySymbol = MoneyAmount.defaultCurrency.symbol;
 
     return Scaffold(
       appBar: AppBar(title: Text(_isEditing ? 'Edit vehicle' : 'Add vehicle')),
@@ -206,7 +212,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                     ),
                 ],
                 onSelectionChanged: (selection) {
-                  setState(() => _distanceUnit = selection.first);
+                  _setDistanceUnit(selection.first);
                 },
               ),
               const SizedBox(height: DTSpacing.xl),
@@ -306,10 +312,11 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                       decimal: true,
                     ),
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
                     ],
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Purchase price',
+                      prefixText: currencySymbol,
                     ),
                     validator: _validateOptionalNonNegativeDouble,
                   ),
@@ -357,6 +364,24 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     }
   }
 
+  void _setDistanceUnit(DistanceUnit unit) {
+    if (unit == _distanceUnit) {
+      return;
+    }
+
+    _convertWholeDistanceText(
+      _odometerController,
+      from: _distanceUnit,
+      to: unit,
+    );
+    _convertWholeDistanceText(
+      _purchaseMileageController,
+      from: _distanceUnit,
+      to: unit,
+    );
+    setState(() => _distanceUnit = unit);
+  }
+
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
     setState(() => _formError = null);
@@ -389,6 +414,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     try {
       final controller = context.read<DriveTrackerController>();
       if (_isEditing) {
+        final confirmed = await _confirmDistanceUnitChangeIfNeeded();
+        if (!confirmed) {
+          return;
+        }
         await controller.updateVehicle(widget.vehicle!.id, draft);
       } else {
         await controller.addVehicle(draft);
@@ -407,6 +436,34 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     } catch (_) {
       setState(() => _formError = 'Could not save vehicle. Please try again.');
     }
+  }
+
+  Future<bool> _confirmDistanceUnitChangeIfNeeded() async {
+    final vehicle = widget.vehicle;
+    if (vehicle == null || vehicle.distanceUnit == _distanceUnit) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change distance unit?'),
+        content: Text(
+          'Existing mileage records for ${vehicle.name} will be converted from '
+          '${_unitLabel(vehicle.distanceUnit)} to ${_unitLabel(_distanceUnit)}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Change unit'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 
   String? _required(String? value, String label) {
@@ -469,8 +526,32 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     return int.tryParse(normalized);
   }
 
+  void _convertWholeDistanceText(
+    TextEditingController controller, {
+    required DistanceUnit from,
+    required DistanceUnit to,
+  }) {
+    final value = _parseInt(controller.text);
+    if (value == null) {
+      return;
+    }
+    controller.text = DTFormatters.wholeNumber(
+      DistanceUnitConversion.convertWholeDistance(value, from: from, to: to),
+    );
+  }
+
+  String _unitLabel(DistanceUnit unit) {
+    return switch (unit) {
+      DistanceUnit.miles => 'Miles (mi)',
+      DistanceUnit.kilometers => 'Kilometres (km)',
+    };
+  }
+
   double? _parseDouble(String value) {
-    final normalized = value.trim();
+    final normalized = value
+        .replaceAll(',', '')
+        .replaceAll(MoneyAmount.defaultCurrency.symbol, '')
+        .trim();
     if (normalized.isEmpty) {
       return null;
     }

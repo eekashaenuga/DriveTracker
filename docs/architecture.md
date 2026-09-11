@@ -193,6 +193,12 @@ Adding an attachment copies the file first, verifies a managed path, then insert
 
 Android file picking and opening are implemented through a small `drivetracker/attachments` method channel. The picker uses Android's open-document UI for PDFs and images, copies content into an internal temporary file for Dart validation, and the Dart service then copies it into managed storage. Opening delegates to an installed Android viewer through a `FileProvider` content URI. No cloud picker, sync, OCR, PDF renderer, or document verification is included.
 
+## Data Safety
+
+Milestone 8 keeps schema version `4` and introduces backup, restore, and CSV export through `DataSafetyService`. Backup format version `1` stores a manifest, database table data, and managed attachment files using portable relative paths. CSV export is a separate spreadsheet-review path and is not treated as a backup format.
+
+Restore is intentionally conservative. The app inspects a selected backup first, displays its manifest facts, requires explicit confirmation, creates a safety backup of the current local state, and then replaces local data. If restore fails, the service preserves the existing data where possible and reports a user-facing `DataSafetyException`. UI polish must not bypass confirmation, alter safety-backup creation, or change the backup manifest contract.
+
 ## Financial Aggregation
 
 Vehicle spending is currently:
@@ -309,6 +315,14 @@ The screen avoids large subtree animations and whole-screen transitions. It uses
 
 Home maintenance attention only surfaces active reminder-enabled items that need setup or are upcoming, due soon, due, or overdue. Normal and archived items remain available in maintenance screens but do not crowd the Home dashboard.
 
+## Presentation System
+
+Milestone 9 does not add a migration, persistence table, or business rule. It consolidates presentation around `DTTheme`, `DTSpacing`, `DTRadii`, `DTAccents`, and reusable widgets such as `DTCategoryIcon`, `DTStatusBadge`, `DTListCard`, `DTMetricCard`, `DTActivityRow`, and `DTFormSection`.
+
+The visual system uses restrained semantic accents for fuel, service, expense, income, odometer, maintenance, documents, and storage. Those accents are presentation hints only; state and meaning are still conveyed through labels, icons, and domain values so the UI does not rely on color alone. Layouts prefer finite constraints, `Wrap`, `Flexible`, and horizontal scroll only where controls can legitimately exceed a narrow phone width.
+
+Motion is deliberately local and deterministic: Material ink feedback, the central add-button press scale, chart selection, and ordinary route/sheet transitions. M9 avoids large dashboard entrance animations, continuous effects, network imagery, and fabricated vehicle data.
+
 ## Tools And Fuel Calculator
 
 Milestone 7 keeps schema version `4`; it adds no migration and no calculator persistence table. Calculator state is ephemeral UI state. Results never create refuel, expense, income, service, odometer, document, attachment, or history rows.
@@ -336,4 +350,5 @@ The Fuel Calculator screen is reached from More -> Fuel Calculator. It presents 
 - No routing package was added because the current navigation is small and imperative routes keep the dependency surface lower.
 - No Flutter picker/path/open-file packages were added for Milestone 6. Android-first file selection, managed-root discovery, and external opening use the existing Flutter method-channel capability plus a small Android implementation, keeping `pubspec.yaml` and `pubspec.lock` unchanged.
 - No dependencies were added for Milestone 7. Fuel calculator formulas and UI use Dart, Flutter Material, and existing DriveTracker utilities.
+- No dependencies were added for Milestone 9. Polish work uses Flutter Material, existing widgets, and DriveTracker's shared design tokens.
 - No analytics, telemetry, sync, account, or cloud packages are included.

@@ -225,10 +225,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
         break;
       case DailyActivityType.odometer:
         if (mounted) {
-          await showDialog<void>(
+          final editRequested = await showDialog<bool>(
             context: context,
             builder: (_) => _OdometerActivityDialog(activity: activity),
           );
+          if (editRequested == true && mounted) {
+            final entry = await controller.odometerEntryById(activity.recordId);
+            if (entry != null && mounted) {
+              await AppNavigation.openEditOdometerEntry(context, entry);
+            }
+          }
         }
         break;
       case DailyActivityType.all:
@@ -586,6 +592,7 @@ class _ActivityList extends StatelessWidget {
             title: activity.title,
             subtitle: _subtitle(activity),
             trailing: _trailing(context, activity),
+            accentColor: _activityColor(context, activity.type),
           ),
         ),
       );
@@ -628,6 +635,17 @@ class _ActivityList extends StatelessWidget {
       DailyActivityType.service => Icons.build_circle_outlined,
       DailyActivityType.odometer => Icons.speed_rounded,
       DailyActivityType.all => Icons.history_rounded,
+    };
+  }
+
+  Color _activityColor(BuildContext context, DailyActivityType type) {
+    return switch (type) {
+      DailyActivityType.refuel => DTAccents.fuel(context),
+      DailyActivityType.expense => DTAccents.expense(context),
+      DailyActivityType.income => DTAccents.income(context),
+      DailyActivityType.service => DTAccents.service(context),
+      DailyActivityType.odometer => DTAccents.odometer(context),
+      DailyActivityType.all => DTAccents.neutral(context),
     };
   }
 
@@ -681,7 +699,12 @@ class _OdometerActivityDialog extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          key: const Key('historyEditOdometerButton'),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Edit'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
           child: const Text('Close'),
         ),
       ],

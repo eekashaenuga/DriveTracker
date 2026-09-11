@@ -23,7 +23,7 @@ void main() {
     await _enterText(tester, const Key('tripEconomyField'), '40');
     await _enterText(tester, const Key('tripFuelPriceField'), '1.45');
 
-    expect(find.text('Fuel Calculator'), findsOneWidget);
+    expect(find.byKey(const Key('fuelCalculatorScreen')), findsOneWidget);
     expect(
       find.descendant(
         of: find.byKey(const Key('tripEstimatedCostValue')),
@@ -226,6 +226,65 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Fuel Calculator mode selector is reachable on phone widths', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final width in [320.0, 360.0, 412.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 760));
+      final services = createTestServices();
+      await tester.runAsync(() async {
+        await services.vehicleService.addVehicle(
+          _vehicleDraft('Commuter $width', 1000),
+        );
+      });
+
+      await _openFuelCalculator(tester, services);
+      final openingException = tester.takeException();
+      expect(
+        openingException,
+        isNull,
+        reason:
+            'Fuel Calculator should open cleanly at $width. ${_exceptionDetails(openingException)}',
+      );
+
+      for (final label in [
+        'Trip Cost',
+        'Cost Sharing',
+        'Fuel Required',
+        'Price Comparison',
+      ]) {
+        expect(
+          find
+              .descendant(
+                of: find.byKey(const Key('fuelCalculatorModeSelector')),
+                matching: find.text(label),
+              )
+              .hitTestable(),
+          findsOneWidget,
+          reason: '$label should be visible at $width logical pixels.',
+        );
+      }
+
+      await _tapMode(tester, 'Price Comparison');
+      await _scrollUntilFound(
+        tester,
+        find.byKey(const Key('comparisonFuelAmountField')),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      final cleanupException = tester.takeException();
+      expect(
+        cleanupException,
+        isNull,
+        reason:
+            'Fuel Calculator cleanup should be clean at $width. ${_exceptionDetails(cleanupException)}',
+      );
+    }
+  });
 }
 
 Future<DriveTrackerController> _pumpApp(
@@ -275,7 +334,7 @@ Future<void> _openFuelCalculator(
 
 Future<void> _enterText(WidgetTester tester, Key key, String value) async {
   final finder = find.byKey(key);
-  await _pumpUntilFound(tester, finder);
+  await _scrollUntilFound(tester, finder);
   await tester.ensureVisible(finder);
   await tester.pump();
   await tester.enterText(finder, value);
@@ -398,4 +457,11 @@ RefuelDraft _refuelDraft(
     isFullTank: isFullTank,
     missedPreviousRefuel: missedPreviousRefuel,
   );
+}
+
+String _exceptionDetails(Object? exception) {
+  if (exception is FlutterError) {
+    return exception.toStringDeep();
+  }
+  return exception?.toString() ?? '';
 }

@@ -23,7 +23,14 @@ class OdometerAssessment {
 }
 
 class OdometerPolicy {
-  const OdometerPolicy({this.largeIncreaseThreshold = 50000});
+  const OdometerPolicy({
+    this.largeIncreaseThreshold = unusuallyLargeIncreaseThreshold,
+  });
+
+  // TODO: Consider contextual odometer anomaly detection using elapsed time,
+  // recorded refuels, fuel tank capacity, recent economy and typical mileage.
+  // M9 intentionally keeps this as a simple typo-catch warning only.
+  static const unusuallyLargeIncreaseThreshold = 5000;
 
   final int largeIncreaseThreshold;
 
@@ -73,4 +80,13 @@ class OdometerConfirmationRequired implements Exception {
 
   @override
   String toString() => assessment.message;
+}
+
+class OdometerEditConfirmationRequired implements Exception {
+  const OdometerEditConfirmationRequired(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

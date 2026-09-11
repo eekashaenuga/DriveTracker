@@ -98,6 +98,7 @@ class DriveTrackerController extends ChangeNotifier {
     _odometerService = OdometerService(
       vehicleRepository: _vehicleRepository,
       odometerRepository: _odometerRepository,
+      clock: () => _clock().toUtc(),
     );
     _categoryService = CategoryService(categoryRepository: _categoryRepository);
     _attachmentService = AttachmentService(
@@ -250,8 +251,16 @@ class DriveTrackerController extends ChangeNotifier {
     return _odometerRepository.currentOdometerForVehicle(vehicleId);
   }
 
+  Future<OdometerEntry?> odometerEntryById(String id) {
+    return _odometerRepository.getById(id);
+  }
+
   Future<List<OdometerEntry>> odometerEntriesForVehicle(String vehicleId) {
     return _odometerRepository.recentForVehicle(vehicleId, limit: 20);
+  }
+
+  Future<List<OdometerEntry>> odometerHistoryForVehicle(String vehicleId) {
+    return _odometerRepository.allForVehicle(vehicleId);
   }
 
   Future<List<RecordCategory>> categoriesFor(RecordCategoryType type) {
@@ -432,10 +441,34 @@ class DriveTrackerController extends ChangeNotifier {
     });
   }
 
+  Future<Vehicle> updateVehicleDistanceUnit(
+    String vehicleId,
+    DistanceUnit distanceUnit,
+  ) async {
+    return _runMutation(() async {
+      final currentVehicleId = selectedVehicle?.id;
+      final vehicle = await _vehicleService.updateVehicleDistanceUnit(
+        vehicleId,
+        distanceUnit,
+      );
+      await _reloadData(
+        preferredVehicleId: vehicle.isArchived ? currentVehicleId : vehicle.id,
+      );
+      return vehicle;
+    });
+  }
+
   Future<void> archiveVehicle(String vehicleId) async {
     return _runMutation(() async {
       await _vehicleService.archiveVehicle(vehicleId);
       await _reloadData();
+    });
+  }
+
+  Future<void> restoreVehicle(String vehicleId) async {
+    return _runMutation(() async {
+      await _vehicleService.restoreVehicle(vehicleId);
+      await _reloadData(preferredVehicleId: vehicleId);
     });
   }
 
@@ -479,6 +512,24 @@ class DriveTrackerController extends ChangeNotifier {
         confirmLargeIncrease: confirmLargeIncrease,
       );
       await _reloadData(preferredVehicleId: vehicle.id);
+      return entry;
+    });
+  }
+
+  Future<OdometerEntry> updateOdometerEntry(
+    String entryId, {
+    required int odometer,
+    required DateTime eventDateTime,
+    bool confirmUnusualSequence = false,
+  }) async {
+    return _runMutation(() async {
+      final entry = await _odometerService.updateManualReading(
+        entryId: entryId,
+        odometer: odometer,
+        eventDateTime: eventDateTime,
+        confirmUnusualSequence: confirmUnusualSequence,
+      );
+      await _reloadData(preferredVehicleId: entry.vehicleId);
       return entry;
     });
   }

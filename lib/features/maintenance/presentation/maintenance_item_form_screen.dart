@@ -7,6 +7,7 @@ import '../../../app/theme/dt_tokens.dart';
 import '../../../core/utilities/formatters.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
+import '../../../shared/widgets/dt_odometer_input.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
 import '../../vehicles/domain/vehicle.dart';
 import '../domain/maintenance_item.dart';
@@ -37,6 +38,7 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
   var _baselineDate = DateTime.now();
   String? _formError;
   bool _didDefaultFromController = false;
+  int? _lastOdometer;
 
   bool get _isEditing => widget.item != null;
 
@@ -63,7 +65,9 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
       return;
     }
     _didDefaultFromController = true;
-    _vehicleId ??= context.read<DriveTrackerController>().selectedVehicle?.id;
+    final controller = context.read<DriveTrackerController>();
+    _vehicleId ??= controller.selectedVehicle?.id;
+    _lastOdometer = controller.currentOdometer;
   }
 
   @override
@@ -139,7 +143,18 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
                     value == null ? 'Select a vehicle.' : null,
                 onChanged: _isEditing
                     ? null
-                    : (value) => setState(() => _vehicleId = value),
+                    : (value) async {
+                        setState(() => _vehicleId = value);
+                        if (value == null) {
+                          return;
+                        }
+                        final odometer = await context
+                            .read<DriveTrackerController>()
+                            .currentOdometerForVehicle(value);
+                        if (mounted) {
+                          setState(() => _lastOdometer = odometer);
+                        }
+                      },
               ),
               const SizedBox(height: DTSpacing.md),
               TextFormField(
@@ -258,19 +273,22 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
                     onChanged: (value) => setState(() => _baselineDate = value),
                   ),
                   const SizedBox(height: DTSpacing.md),
-                  TextFormField(
-                    key: const Key('maintenanceBaselineOdometerField'),
+                  DTOdometerInput(
+                    fieldKey: const Key('maintenanceBaselineOdometerField'),
                     controller: _baselineOdometerController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    textInputAction: TextInputAction.done,
-                    decoration: InputDecoration(
-                      labelText: 'Last completed odometer',
-                      suffixText:
-                          selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                    label: 'Last completed odometer',
+                    unitLabel: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                    helperText: dtOdometerContextText(
+                      referenceOdometer: _lastOdometer,
+                      unit: selectedVehicle?.distanceUnit,
+                      enteredOdometer: dtParseOdometerInput(
+                        _baselineOdometerController.text,
+                      ),
                     ),
+                    textInputAction: TextInputAction.done,
                     validator: (value) =>
                         _validateOptionalNonNegativeInt(value, 'Odometer'),
+                    onChanged: (_) => setState(() {}),
                   ),
                 ],
               ],

@@ -96,9 +96,19 @@ class VehiclesScreen extends StatelessWidget {
               for (final vehicle in controller.archivedVehicles) ...[
                 DTVehicleCard(
                   vehicle: vehicle,
+                  currentOdometerLabel:
+                      'Archived / ${vehicle.registrationLabel}',
                   onTap: () =>
                       AppNavigation.openVehicleDetails(context, vehicle),
-                  trailing: const Icon(Icons.archive_outlined),
+                  trailing: TextButton.icon(
+                    key: Key('restoreVehicle_${vehicle.id}'),
+                    onPressed: () => _restoreVehicle(context, vehicle),
+                    icon: const Icon(Icons.unarchive_outlined),
+                    label: const Text(
+                      'Restore',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: DTSpacing.sm),
               ],
@@ -154,6 +164,21 @@ class VehiclesScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('${vehicle.name} archived.')));
+      }
+    } on ValidationException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+  }
+
+  Future<void> _restoreVehicle(BuildContext context, Vehicle vehicle) async {
+    try {
+      await context.read<DriveTrackerController>().restoreVehicle(vehicle.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${vehicle.name} restored.')));
       }
     } on ValidationException catch (error) {
       if (context.mounted) {

@@ -4,7 +4,7 @@ DriveTracker is a local-first Flutter application for managing vehicles, mileage
 
 ## Current Milestone
 
-Implemented through Milestone 7:
+Implemented through Milestone 9:
 
 - Material 3 app shell with Home, Insights, central add action, Reminders, and More.
 - First-run flow from welcome screen to adding the first vehicle.
@@ -34,12 +34,18 @@ Implemented through Milestone 7:
 - Pure calculator domain logic for miles/kilometres, litres/Imperial gallons/US gallons, UK MPG, US MPG, L/100 km, and km/L conversion.
 - Selected-vehicle calculator defaults that can use the current vehicle's latest trustworthy full-to-full fuel economy and latest recorded fuel price, while keeping manual input available and clearly labelled.
 - Ephemeral fuel estimates that do not create refuels, expenses, services, odometer readings, calculator history, or any other persisted vehicle record.
+- Data & Storage tools for local backup creation, backup inspection/restore with a safety backup first, and CSV export for spreadsheet review.
+- Backup format version 1 with schema version 4 database data and managed attachments kept portable through relative attachment paths.
+- A consolidated DriveTracker presentation system using shared spacing/radius tokens, category accents, icon treatments, metric cards, list cards, status badges, and form sections.
+- A polished Home dashboard with stronger vehicle identity, current odometer context, category-aware metrics, reminder status badges, interactive spending trend, and cleaner recent activity rows.
+- A two-column graphical quick-entry sheet for Refuel, Service, Expense, Income, Odometer, and Maintenance entry points on phone-width layouts.
+- App-wide visual polish across More, Reminders, Maintenance, History activity rows, forms, attachments, settings, and data/storage summaries while preserving existing behavior.
 - Settings foundation for system, light, and dark theme preferences.
-- Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, Home dashboard aggregation, spending trends, History filters, Insights calculations, drill-down, migrations, document lifecycle, attachments, calculator formulas/defaults/UI, layout states, and important UI flows.
+- Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, Home dashboard aggregation, spending trends, History filters, Insights calculations, drill-down, migrations, document lifecycle, attachments, calculator formulas/defaults/UI, data safety, layout states, polish regressions, and important UI flows.
 
 Deferred to later milestones:
 
-- Notifications, exports, backup/restore, sync, accounts, OCR, and external vehicle integrations.
+- Notifications, sync, accounts, OCR, and external vehicle integrations.
 
 ## Technology
 
@@ -63,6 +69,7 @@ The project uses a feature-oriented structure:
 - `lib/features/documents`: vehicle document model, repository, service, expiry reminders, Documents list, form, and detail screens.
 - `lib/features/attachments`: polymorphic attachment metadata, managed-file storage, Android picker/open bridge, service, and reusable attachment panel.
 - `lib/features/calculator`: pure fuel calculator domain logic and the More-accessible calculator UI.
+- `lib/features/data_safety`: backup, restore, CSV export, manifest inspection, safety-backup handling, and Data & Storage UI.
 - `lib/features/home`: dashboard data contract and Home UI.
 - `lib/features/insights`: derived analytics repository, range-aware insight models, and the Insights dashboard.
 - `lib/features/reminders`, `lib/features/more`, `lib/features/settings`: milestone screens and settings foundation.
@@ -114,6 +121,14 @@ The calculator can copy defaults from the selected vehicle when available: the l
 
 Calculator results are estimates. They are labelled as based on recorded or manual values and are not saved as transactions, history, refuels, expenses, services, or odometer readings.
 
+## Data Safety
+
+Milestone 8 adds local backup, restore, and CSV export without changing the schema beyond V4. Backups use format version 1 and include database data plus managed attachments. Restore inspects the selected backup first, asks for confirmation, creates a safety backup, and only then replaces local data. CSV export is for spreadsheet review and is not a substitute for backups.
+
+## Presentation System
+
+Milestone 9 is a polish milestone. It adds no schema migration, backup-format change, dependency change, calculator formula change, analytics change, or data-path change. The app now uses shared DriveTracker tokens and widgets for category icons, status badges, list cards, metric cards, form sections, and themed surfaces. Visual changes are meant to improve hierarchy, responsiveness, light/dark consistency, and accessibility while continuing to show only real stored or safely derived vehicle data.
+
 ## Run
 
 ```bash
@@ -138,4 +153,4 @@ DriveTracker is local-first. It stores vehicle, odometer, refuel, expense, incom
 
 ## Roadmap Summary
 
-Next milestones can add notifications, exports, backup/restore, and optional integrations. These should build on the existing repository/service boundaries, schema migration path, and portable relative attachment paths rather than replacing user data.
+Next milestones can add notifications, sync, account-backed optional features, OCR, and external integrations. These should build on the existing repository/service boundaries, schema migration path, backup manifest, and portable relative attachment paths rather than replacing user data.

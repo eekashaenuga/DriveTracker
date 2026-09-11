@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../shared/widgets/dt_list_card.dart';
 import '../../../shared/widgets/dt_section_header.dart';
 
 class MoreScreen extends StatelessWidget {
@@ -24,74 +25,112 @@ class MoreScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineMedium
                   ?.copyWith(fontWeight: FontWeight.w900),
             ),
-            const DTSectionHeader(title: 'Manage'),
-            ListTile(
-              leading: const Icon(Icons.directions_car_rounded),
-              title: const Text('Vehicles'),
-              subtitle: const Text('Add, edit, switch and archive vehicles'),
-              trailing: const Icon(Icons.chevron_right_rounded),
+            const SizedBox(height: DTSpacing.xs),
+            Text(
+              'Vehicle records, tools and local data controls.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const DTSectionHeader(title: 'Vehicle'),
+            _MoreTile(
+              icon: Icons.directions_car_rounded,
+              title: 'Vehicles',
+              subtitle: 'Add, edit, switch and archive vehicles',
+              accent: DTAccents.odometer,
               onTap: () => AppNavigation.openVehicles(context),
             ),
-            ListTile(
-              leading: const Icon(Icons.settings_rounded),
-              title: const Text('Settings'),
-              subtitle: const Text('Theme preference'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => AppNavigation.openSettings(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.history_rounded),
-              title: const Text('History'),
-              subtitle: const Text(
-                'Fuel, expense, income, service and odometer records',
-              ),
-              trailing: const Icon(Icons.chevron_right_rounded),
+            const DTSectionHeader(title: 'Records'),
+            _MoreTile(
+              icon: Icons.history_rounded,
+              title: 'History',
+              subtitle: 'Fuel, expense, income, service and odometer records',
+              accent: DTAccents.neutral,
               onTap: () => AppNavigation.openHistory(context),
             ),
-            ListTile(
+            const SizedBox(height: DTSpacing.sm),
+            _MoreTile(
               key: const Key('moreMaintenanceTile'),
-              leading: const Icon(Icons.handyman_rounded),
-              title: const Text('Maintenance'),
-              subtitle: const Text('Service intervals and item history'),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              icon: Icons.handyman_rounded,
+              title: 'Maintenance',
+              subtitle: 'Service intervals and item history',
+              accent: DTAccents.maintenance,
               onTap: () => AppNavigation.openMaintenance(context),
             ),
-            ListTile(
+            const SizedBox(height: DTSpacing.sm),
+            _MoreTile(
               key: const Key('moreDocumentsTile'),
-              leading: const Icon(Icons.description_outlined),
-              title: const Text('Documents'),
-              subtitle: const Text('Insurance, MOT, receipts and files'),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              icon: Icons.description_outlined,
+              title: 'Documents',
+              subtitle: 'Insurance, MOT, receipts and files',
+              accent: DTAccents.documents,
               onTap: () => AppNavigation.openDocuments(context),
             ),
-            ListTile(
+            const SizedBox(height: DTSpacing.sm),
+            _MoreTile(
               key: const Key('moreDataStorageTile'),
-              leading: const Icon(Icons.backup_outlined),
-              title: const Text('Data & Storage'),
-              subtitle: const Text('Backup, restore, export and local usage'),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              icon: Icons.backup_outlined,
+              title: 'Data & Storage',
+              subtitle: 'Backup, restore, export and local usage',
+              accent: DTAccents.storage,
               onTap: () => AppNavigation.openDataStorage(context),
             ),
             const DTSectionHeader(title: 'Tools'),
-            ListTile(
+            _MoreTile(
               key: const Key('moreFuelCalculatorTile'),
-              leading: const Icon(Icons.calculate_outlined),
-              title: const Text('Fuel Calculator'),
-              subtitle: const Text('Trip cost, sharing, fuel and price checks'),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              icon: Icons.calculate_outlined,
+              title: 'Fuel Calculator',
+              subtitle: 'Trip cost, sharing, fuel and price checks',
+              accent: DTAccents.fuel,
               onTap: () => AppNavigation.openFuelCalculator(context),
             ),
+            const DTSectionHeader(title: 'Preferences'),
+            _MoreTile(
+              icon: Icons.settings_rounded,
+              title: 'Settings',
+              subtitle: 'Theme preference and regional choices',
+              accent: DTAccents.neutral,
+              onTap: () => AppNavigation.openSettings(context),
+            ),
             const DTSectionHeader(title: 'About'),
-            const ListTile(
-              leading: Icon(Icons.lock_outline_rounded),
-              title: Text('Local-first by design'),
-              subtitle: Text(
-                'Vehicle and daily record data stays on this device.',
-              ),
+            _MoreTile(
+              icon: Icons.lock_outline_rounded,
+              title: 'Local-first by design',
+              subtitle: 'Vehicle and daily record data stays on this device.',
+              accent: DTAccents.storage,
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MoreTile extends StatelessWidget {
+  const _MoreTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.accent,
+    this.onTap,
+    super.key,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color Function(BuildContext context) accent;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return DTListCard(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      accentColor: accent(context),
+      onTap: onTap,
+      trailing: onTap == null ? null : const Icon(Icons.chevron_right_rounded),
     );
   }
 }

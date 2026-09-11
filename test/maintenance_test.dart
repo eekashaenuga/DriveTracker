@@ -382,6 +382,7 @@ void main() {
               ServiceItemDraft(maintenanceItemId: oil.id, itemName: oil.name),
             ],
           ),
+          confirmLargeIncrease: true,
         );
         final latest = await services.serviceRecordService.createServiceRecord(
           ServiceRecordDraft(
@@ -393,6 +394,7 @@ void main() {
               ServiceItemDraft(maintenanceItemId: oil.id, itemName: oil.name),
             ],
           ),
+          confirmLargeIncrease: true,
         );
 
         var reminders = await services.maintenanceItemService

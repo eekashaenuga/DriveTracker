@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../shared/widgets/dt_category_icon.dart';
 import '../../../shared/widgets/dt_section_header.dart';
 import '../domain/data_safety_service.dart';
 
@@ -410,22 +411,26 @@ class _StorageRows extends StatelessWidget {
           label: 'Database',
           value: _formatBytes(summary.databaseBytes),
         ),
+        const SizedBox(height: DTSpacing.sm),
         _StorageRow(
           icon: Icons.attachment_rounded,
           label: 'Attachments',
           value:
               '${summary.attachmentCount} / ${_formatBytes(summary.attachmentBytes)}',
         ),
+        const SizedBox(height: DTSpacing.sm),
         _StorageRow(
           icon: Icons.inventory_2_outlined,
           label: 'Total local data',
           value: _formatBytes(summary.totalBytes),
         ),
+        const SizedBox(height: DTSpacing.sm),
         _StorageRow(
           icon: Icons.schema_outlined,
           label: 'Schema version',
           value: '${summary.schemaVersion}',
         ),
+        const SizedBox(height: DTSpacing.sm),
         _StorageRow(
           icon: Icons.verified_user_outlined,
           label: 'Backup format',
@@ -461,14 +466,47 @@ class _StorageRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon),
-      title: Text(label),
-      trailing: Text(
-        value,
-        style: Theme.of(context).textTheme.labelLarge
-            ?.copyWith(fontWeight: FontWeight.w800),
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Material(
+      color: colors.surfaceContainerHighest.withValues(alpha: 0.38),
+      borderRadius: DTRadii.cardRadius,
+      child: Padding(
+        padding: const EdgeInsets.all(DTSpacing.md),
+        child: Row(
+          children: [
+            DTCategoryIcon(
+              icon: icon,
+              color: DTAccents.storage(context),
+              size: 38,
+              iconSize: DTIconSizes.sm,
+            ),
+            const SizedBox(width: DTSpacing.md),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: DTSpacing.sm),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  value,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

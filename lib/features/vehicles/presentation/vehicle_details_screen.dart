@@ -5,6 +5,7 @@ import '../../../app/app_controller.dart';
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
 import '../../../core/utilities/formatters.dart';
+import '../../../core/utilities/money.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_activity_row.dart';
 import '../../../shared/widgets/dt_metric_card.dart';
@@ -97,7 +98,15 @@ class VehicleDetailsScreen extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                     ),
-                if (!vehicle.isArchived) ...[
+                if (vehicle.isArchived) ...[
+                  const SizedBox(height: DTSpacing.xl),
+                  FilledButton.icon(
+                    key: const Key('restoreVehicleDetailsButton'),
+                    onPressed: () => _restoreVehicle(context, vehicle),
+                    icon: const Icon(Icons.unarchive_outlined),
+                    label: const Text('Restore vehicle'),
+                  ),
+                ] else ...[
                   const SizedBox(height: DTSpacing.xl),
                   OutlinedButton.icon(
                     onPressed: () => _confirmArchive(context, vehicle),
@@ -181,6 +190,21 @@ class VehicleDetailsScreen extends StatelessWidget {
       }
     }
   }
+
+  Future<void> _restoreVehicle(BuildContext context, Vehicle vehicle) async {
+    try {
+      await context.read<DriveTrackerController>().restoreVehicle(vehicle.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${vehicle.name} restored.')));
+      }
+    } on ValidationException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+  }
 }
 
 class _ProfileRows extends StatelessWidget {
@@ -212,7 +236,7 @@ class _ProfileRows extends StatelessWidget {
       if (vehicle.purchasePrice != null)
         _ProfileRowData(
           'Purchase price',
-          vehicle.purchasePrice!.toStringAsFixed(2),
+          '${MoneyAmount.defaultCurrency.symbol}${vehicle.purchasePrice!.toStringAsFixed(2)}',
         ),
       if (vehicle.seller != null) _ProfileRowData('Seller', vehicle.seller!),
       if (vehicle.notes != null) _ProfileRowData('Notes', vehicle.notes!),

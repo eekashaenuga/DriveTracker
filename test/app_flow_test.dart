@@ -15,6 +15,7 @@ import 'package:drivetracker/features/home/presentation/home_screen.dart';
 import 'package:drivetracker/features/maintenance/domain/maintenance_item.dart';
 import 'package:drivetracker/features/maintenance/domain/maintenance_reminder.dart';
 import 'package:drivetracker/features/maintenance/domain/service_record.dart';
+import 'package:drivetracker/features/odometer/domain/odometer_entry.dart';
 import 'package:drivetracker/features/vehicles/domain/vehicle.dart';
 import 'package:drivetracker/features/vehicles/domain/vehicle_draft.dart';
 import 'package:flutter/material.dart';
@@ -137,6 +138,118 @@ void main() {
     expect(find.text('Sep · £50.00 spent'), findsOneWidget);
   });
 
+  testWidgets('Settings Distance units manages per-vehicle units', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    late Vehicle commuter;
+    late Vehicle weekend;
+    await tester.runAsync(() async {
+      commuter = await services.vehicleService.addVehicle(
+        _draft('Commuter', 1000),
+      );
+      weekend = await services.vehicleService.addVehicle(
+        _draft('Weekend', 5000, unit: DistanceUnit.kilometers),
+      );
+    });
+
+    await _pumpApp(tester, services, find.byKey(const Key('mainActionButton')));
+    await _tapAndPump(tester, find.text('More').last);
+    await _scrollUntilFound(tester, find.text('Settings'));
+    await _tapAndPump(tester, find.text('Settings').first);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('settingsDistanceUnitsTile')),
+    );
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('settingsDistanceUnitsTile')),
+    );
+    await _pumpUntilFound(tester, find.byKey(const Key('vehicleUnitsScreen')));
+
+    final commuterTile = find.byKey(Key('vehicleUnitTile_${commuter.id}'));
+    final weekendTile = find.byKey(Key('vehicleUnitTile_${weekend.id}'));
+    expect(find.text('Vehicle units'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: commuterTile,
+        matching: find.text('Ford Focus · Current: Miles (mi)'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: weekendTile,
+        matching: find.text('Ford Focus · Current: Kilometres (km)'),
+      ),
+      findsOneWidget,
+    );
+
+    await _tapAndPump(tester, commuterTile);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('vehicleUnitOption_${commuter.id}_kilometers')),
+    );
+    await _tapAndPump(
+      tester,
+      find.byKey(Key('vehicleUnitOption_${commuter.id}_kilometers')),
+    );
+    await _pumpUntilFound(tester, find.text('Change distance unit?'));
+    await _tapAndPump(tester, find.text('Cancel').last);
+    expect(
+      (await tester.runAsync(() => services.vehicles.getById(commuter.id)))
+          ?.distanceUnit,
+      DistanceUnit.miles,
+    );
+
+    await _tapAndPump(tester, commuterTile);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('vehicleUnitOption_${commuter.id}_kilometers')),
+    );
+    await _tapAndPump(
+      tester,
+      find.byKey(Key('vehicleUnitOption_${commuter.id}_kilometers')),
+    );
+    await _pumpUntilFound(tester, find.text('Change distance unit?'));
+    await _tapAndRunAsync(tester, find.text('Change unit').last);
+    await _waitForVehicleDistanceUnit(
+      tester,
+      services,
+      commuter.id,
+      DistanceUnit.kilometers,
+    );
+    await _pumpUntilFound(
+      tester,
+      find.descendant(
+        of: commuterTile,
+        matching: find.text('Ford Focus · Current: Kilometres (km)'),
+      ),
+    );
+
+    final updatedCommuter = await tester.runAsync(
+      () => services.vehicles.getById(commuter.id),
+    );
+    final updatedWeekend = await tester.runAsync(
+      () => services.vehicles.getById(weekend.id),
+    );
+    expect(updatedCommuter?.distanceUnit, DistanceUnit.kilometers);
+    expect(
+      await tester.runAsync(
+        () => services.odometers.currentOdometerForVehicle(commuter.id),
+      ),
+      1609,
+    );
+    expect(updatedWeekend?.distanceUnit, DistanceUnit.kilometers);
+    expect(
+      await tester.runAsync(
+        () => services.odometers.currentOdometerForVehicle(weekend.id),
+      ),
+      5000,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('update odometer flow refreshes Home', (tester) async {
     final services = createTestServices();
     await tester.runAsync(() async {
@@ -158,15 +271,392 @@ void main() {
       find.byKey(const Key('homeUpdateOdometerButton')),
     );
     await _pumpUntilFound(tester, find.byKey(const Key('updateOdometerField')));
+    expect(find.text('Current'), findsOneWidget);
+    expect(find.text('64,000 mi'), findsWidgets);
     await tester.enterText(
       find.byKey(const Key('updateOdometerField')),
       '65142',
     );
+    await tester.pump();
+    expect(find.text('+1,142 mi'), findsOneWidget);
     await _tapAndRunAsync(tester, find.byKey(const Key('saveOdometerButton')));
     await _pumpUntilFound(tester, find.text('Home'));
 
+    expect(
+      find.byKey(const Key('odometerHighJumpConfirmDialog')),
+      findsNothing,
+    );
     expect(find.text('Home'), findsWidgets);
     expect(find.text('65,142 mi'), findsWidgets);
+  });
+
+  testWidgets('large upward odometer change confirms before saving', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    late Vehicle vehicle;
+    await tester.runAsync(() async {
+      vehicle = await services.vehicleService.addVehicle(
+        _draft('Commuter', 70902),
+      );
+    });
+
+    await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('homeUpdateOdometerButton')),
+    );
+
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('homeUpdateOdometerButton')),
+    );
+    await _pumpUntilFound(tester, find.byKey(const Key('updateOdometerField')));
+    await tester.enterText(
+      find.byKey(const Key('updateOdometerField')),
+      '79002',
+    );
+    await tester.pump();
+    expect(find.text('+8,100 mi'), findsOneWidget);
+
+    await _tapAndRunAsync(tester, find.byKey(const Key('saveOdometerButton')));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('odometerHighJumpConfirmDialog')),
+    );
+    expect(find.text('Unusually high odometer reading'), findsOneWidget);
+    expect(
+      find.text(
+        'This reading is 8,100 mi above the previous reading. Please check that the mileage is correct before saving.',
+      ),
+      findsOneWidget,
+    );
+
+    await _tapAndPump(tester, find.text('Go back'));
+    await _pumpUntilGone(
+      tester,
+      find.byKey(const Key('odometerHighJumpConfirmDialog')),
+    );
+    expect(
+      await tester.runAsync(
+        () => services.odometers.currentOdometerForVehicle(vehicle.id),
+      ),
+      70902,
+    );
+
+    await _tapAndRunAsync(tester, find.byKey(const Key('saveOdometerButton')));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('odometerHighJumpConfirmDialog')),
+    );
+    await _tapAndRunAsync(
+      tester,
+      find.byKey(const Key('confirmHighOdometerButton')),
+    );
+    await _pumpUntilFound(tester, find.text('Home'));
+
+    expect(find.text('79,002 mi'), findsWidgets);
+    expect(
+      await tester.runAsync(
+        () => services.odometers.currentOdometerForVehicle(vehicle.id),
+      ),
+      79002,
+    );
+  });
+
+  testWidgets('lower odometer reading still confirms historical save', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    late Vehicle vehicle;
+    await tester.runAsync(() async {
+      vehicle = await services.vehicleService.addVehicle(
+        _draft('Commuter', 70902),
+      );
+    });
+
+    await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('homeUpdateOdometerButton')),
+    );
+
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('homeUpdateOdometerButton')),
+    );
+    await _pumpUntilFound(tester, find.byKey(const Key('updateOdometerField')));
+    await tester.enterText(
+      find.byKey(const Key('updateOdometerField')),
+      '70000',
+    );
+    await tester.pump();
+    expect(find.text('-902 mi'), findsOneWidget);
+
+    await _tapAndRunAsync(tester, find.byKey(const Key('saveOdometerButton')));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('odometerHistoricalConfirmDialog')),
+    );
+    await _tapAndRunAsync(
+      tester,
+      find.byKey(const Key('confirmHistoricalOdometerButton')),
+    );
+    await _pumpUntilFound(tester, find.text('Home'));
+
+    expect(find.text('70,902 mi'), findsWidgets);
+    final entries = await tester.runAsync(
+      () => services.odometers.allForVehicle(vehicle.id),
+    );
+    expect(entries?.map((entry) => entry.odometer), contains(70000));
+    expect(
+      await tester.runAsync(
+        () => services.odometers.currentOdometerForVehicle(vehicle.id),
+      ),
+      70902,
+    );
+  });
+
+  testWidgets('archived vehicle can be restored without losing history', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    late Vehicle commuter;
+    late Vehicle weekend;
+    await tester.runAsync(() async {
+      commuter = await services.vehicleService.addVehicle(
+        _draft('Commuter', 1000),
+      );
+      weekend = await services.vehicleService.addVehicle(
+        _draft('Weekend', 25000),
+      );
+      await services.odometerService.recordManualReading(
+        vehicleId: weekend.id,
+        odometer: 25100,
+      );
+      await services.vehicleService.archiveVehicle(weekend.id);
+    });
+
+    final controller = await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('mainActionButton')),
+    );
+
+    expect(controller.selectedVehicle?.id, commuter.id);
+    expect(
+      (await tester.runAsync(() => services.vehicles.listArchived()))
+          ?.map((vehicle) => vehicle.id),
+      contains(weekend.id),
+    );
+
+    await _openVehiclesScreen(tester);
+    final restoreButton = find.byKey(Key('restoreVehicle_${weekend.id}'));
+    await _scrollUntilFound(tester, restoreButton);
+    await _tapAndRunAsync(tester, restoreButton);
+    await _waitForVehicleRestored(tester, services, weekend.id);
+    await _pumpUntilFound(tester, find.text('25,100 mi'));
+
+    expect(controller.selectedVehicle?.id, weekend.id);
+    expect(
+      await tester.runAsync(() => services.vehicles.listArchived()),
+      isEmpty,
+    );
+    expect(
+      await tester.runAsync(
+        () => services.odometers.currentOdometerForVehicle(weekend.id),
+      ),
+      25100,
+    );
+  });
+
+  testWidgets('History odometer details edit manual reading and refresh', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    late Vehicle vehicle;
+    late OdometerEntry historical;
+    await tester.runAsync(() async {
+      vehicle = await services.vehicleService.addVehicle(
+        _draft('Commuter', 64000),
+      );
+      historical = await services.odometerService.recordManualReading(
+        vehicleId: vehicle.id,
+        odometer: 65000,
+        eventDateTime: DateTime.utc(2026, 9, 10, 8),
+      );
+      await services.odometerService.recordManualReading(
+        vehicleId: vehicle.id,
+        odometer: 66000,
+        eventDateTime: DateTime.utc(2026, 9, 12, 8),
+      );
+    });
+
+    await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('mainActionButton')),
+      now: DateTime.utc(2026, 9, 20, 12),
+    );
+    await _openHistoryScreen(tester);
+    await _pumpUntilFound(tester, find.byKey(const Key('historyLoaded')));
+
+    final row = find.byKey(Key('historyActivity_odometer_${historical.id}'));
+    await _scrollUntilFound(tester, row);
+    await _tapAndPump(tester, row);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('historyOdometerDetails')),
+    );
+    expect(find.text('65,000 mi'), findsWidgets);
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('historyEditOdometerButton')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('editOdometerReadingField')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('editOdometerPreviousContext')),
+    );
+
+    final readingField = tester.widget<TextFormField>(
+      find.byKey(const Key('editOdometerReadingField')),
+    );
+    expect(readingField.controller?.text, '65,000');
+    expect(
+      find.text('Previous chronological reading: 64,000 mi'),
+      findsOneWidget,
+    );
+    expect(find.text('Next chronological reading: 66,000 mi'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('editOdometerReadingField')),
+      '65500',
+    );
+    await _tapAndRunAsync(
+      tester,
+      find.byKey(const Key('saveOdometerEntryButton')),
+    );
+    await _pumpUntilFound(tester, find.textContaining('65,500 mi'));
+
+    final updated = await tester.runAsync<OdometerEntry?>(
+      () => services.odometers.getById(historical.id),
+    );
+    expect(updated?.id, historical.id);
+    expect(updated?.odometer, 65500);
+    expect(
+      await tester.runAsync(
+        () => services.odometers.currentOdometerForVehicle(vehicle.id),
+      ),
+      66000,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('History odometer edit confirms unusual sequence', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    late Vehicle vehicle;
+    late OdometerEntry historical;
+    await tester.runAsync(() async {
+      vehicle = await services.vehicleService.addVehicle(
+        _draft('Commuter', 64000),
+      );
+      historical = await services.odometerService.recordManualReading(
+        vehicleId: vehicle.id,
+        odometer: 65000,
+        eventDateTime: DateTime.utc(2026, 9, 10, 8),
+      );
+      await services.odometerService.recordManualReading(
+        vehicleId: vehicle.id,
+        odometer: 66000,
+        eventDateTime: DateTime.utc(2026, 9, 12, 8),
+      );
+    });
+
+    await _pumpApp(
+      tester,
+      services,
+      find.byKey(const Key('mainActionButton')),
+      now: DateTime.utc(2026, 9, 20, 12),
+    );
+    await _openHistoryScreen(tester);
+    await _pumpUntilFound(tester, find.byKey(const Key('historyLoaded')));
+
+    final row = find.byKey(Key('historyActivity_odometer_${historical.id}'));
+    await _scrollUntilFound(tester, row);
+    await _tapAndPump(tester, row);
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('historyOdometerDetails')),
+    );
+    await _tapAndPump(
+      tester,
+      find.byKey(const Key('historyEditOdometerButton')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('editOdometerReadingField')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('editOdometerNextContext')),
+    );
+    expect(find.text('Next chronological reading: 66,000 mi'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('editOdometerReadingField')),
+      '67000',
+    );
+
+    await _tapAndRunAsync(
+      tester,
+      find.byKey(const Key('saveOdometerEntryButton')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('odometerEditConfirmDialog')),
+    );
+    await _tapAndPump(tester, find.text('Cancel').last);
+    await _pumpUntilGone(
+      tester,
+      find.byKey(const Key('odometerEditConfirmDialog')),
+    );
+    expect(
+      (await tester.runAsync(() => services.odometers.getById(historical.id)))
+          ?.odometer,
+      65000,
+    );
+
+    await _tapAndRunAsync(
+      tester,
+      find.byKey(const Key('saveOdometerEntryButton')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('odometerEditConfirmDialog')),
+    );
+    await _tapAndRunAsync(
+      tester,
+      find.byKey(const Key('confirmOdometerEditButton')),
+    );
+    await _pumpUntilFound(tester, find.textContaining('67,000 mi'));
+
+    expect(
+      (await tester.runAsync(() => services.odometers.getById(historical.id)))
+          ?.odometer,
+      67000,
+    );
+    expect(
+      await tester.runAsync(
+        () => services.odometers.currentOdometerForVehicle(vehicle.id),
+      ),
+      67000,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Home dashboard renders stored summaries', (tester) async {
@@ -654,10 +1144,13 @@ void main() {
       readyKey: const Key('serviceTotalCostField'),
     );
     await _waitForServiceItemsLoaded(tester);
+    expect(find.text('Last recorded: 64,000 mi'), findsOneWidget);
     await tester.enterText(
       find.byKey(const Key('serviceOdometerField')),
       '66000',
     );
+    await tester.pump();
+    expect(find.text('Last recorded: 64,000 mi (+2,000 mi)'), findsOneWidget);
     await tester.enterText(
       find.byKey(const Key('serviceTotalCostField')),
       '240',
@@ -886,6 +1379,13 @@ void main() {
       readyKey: const Key('refuelTotalCostField'),
     );
 
+    expect(find.text('Last recorded: 64,000 mi'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('refuelOdometerField')),
+      '64218',
+    );
+    await tester.pump();
+    expect(find.text('Last recorded: 64,000 mi (+218 mi)'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('refuelTotalCostField')), '50');
     await tester.pump();
     await tester.enterText(find.byKey(const Key('refuelVolumeField')), '40');
@@ -1911,6 +2411,13 @@ Future<void> _openMaintenanceScreen(WidgetTester tester) async {
   await _pumpUntilFound(tester, find.byKey(const Key('maintenanceAddButton')));
 }
 
+Future<void> _openVehiclesScreen(WidgetTester tester) async {
+  await _tapAndPump(tester, find.text('More').last);
+  await _pumpUntilFound(tester, find.text('Vehicles'));
+  await _tapAndPump(tester, find.text('Vehicles').first);
+  await _pumpUntilFound(tester, find.text('Active vehicles'));
+}
+
 Future<void> _openHistoryScreen(WidgetTester tester) async {
   await _tapAndPump(tester, find.text('More').last);
   await _pumpUntilFound(tester, find.text('History'));
@@ -1957,6 +2464,55 @@ Future<VehicleDocument> _waitForDocumentArchived(
     reason: 'Expected document to be archived.',
   );
   return document;
+}
+
+Future<Vehicle> _waitForVehicleRestored(
+  WidgetTester tester,
+  TestServices services,
+  String vehicleId,
+) async {
+  Vehicle? lastVehicle;
+  for (var index = 0; index < 50; index += 1) {
+    final vehicle = await tester.runAsync<Vehicle?>(
+      () => services.vehicles.getById(vehicleId),
+    );
+    lastVehicle = vehicle;
+    if (vehicle != null && !vehicle.isArchived) {
+      return vehicle;
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  final vehicle =
+      lastVehicle ?? fail('Expected vehicle $vehicleId to remain stored.');
+  expect(
+    vehicle.isArchived,
+    isFalse,
+    reason: 'Expected archived vehicle to be restored to active vehicles.',
+  );
+  return vehicle;
+}
+
+Future<Vehicle> _waitForVehicleDistanceUnit(
+  WidgetTester tester,
+  TestServices services,
+  String vehicleId,
+  DistanceUnit unit,
+) async {
+  Vehicle? lastVehicle;
+  for (var index = 0; index < 50; index += 1) {
+    final vehicle = await tester.runAsync<Vehicle?>(
+      () => services.vehicles.getById(vehicleId),
+    );
+    lastVehicle = vehicle;
+    if (vehicle != null && vehicle.distanceUnit == unit) {
+      return vehicle;
+    }
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  final vehicle =
+      lastVehicle ?? fail('Expected vehicle $vehicleId to remain stored.');
+  expect(vehicle.distanceUnit, unit);
+  return vehicle;
 }
 
 Future<File> _writeAttachmentSource(TestServices services, String name) async {
@@ -2228,14 +2784,18 @@ Future<RecordCategory> _categoryById(TestServices services, String id) async {
   return category ?? fail('Expected seeded category $id.');
 }
 
-VehicleDraft _draft(String name, int odometer) {
+VehicleDraft _draft(
+  String name,
+  int odometer, {
+  DistanceUnit unit = DistanceUnit.miles,
+}) {
   return VehicleDraft(
     name: name,
     make: 'Ford',
     model: 'Focus',
     currentOdometer: odometer,
     fuelType: FuelType.petrol,
-    distanceUnit: DistanceUnit.miles,
+    distanceUnit: unit,
   );
 }
 
