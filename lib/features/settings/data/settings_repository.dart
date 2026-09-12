@@ -7,6 +7,8 @@ class SettingsRepository {
 
   static const selectedVehicleIdKey = 'selected_vehicle_id';
   static const themeModeKey = 'theme_mode';
+  static const localReminderNotificationsEnabledKey =
+      'local_reminder_notifications_enabled';
 
   final AppDatabase _database;
 
@@ -30,6 +32,27 @@ class SettingsRepository {
     sqflite.DatabaseExecutor? executor,
   }) {
     return setString(themeModeKey, value, executor: executor);
+  }
+
+  Future<bool> getLocalReminderNotificationsEnabled({
+    sqflite.DatabaseExecutor? executor,
+  }) async {
+    return await getString(
+          localReminderNotificationsEnabledKey,
+          executor: executor,
+        ) ==
+        'true';
+  }
+
+  Future<void> setLocalReminderNotificationsEnabled(
+    bool enabled, {
+    sqflite.DatabaseExecutor? executor,
+  }) {
+    return setString(
+      localReminderNotificationsEnabledKey,
+      enabled ? 'true' : null,
+      executor: executor,
+    );
   }
 
   Future<String?> getString(

@@ -4,7 +4,7 @@ DriveTracker is a local-first Flutter application for managing vehicles, mileage
 
 ## Current Milestone
 
-Implemented through Milestone 9:
+Implemented through Milestone 10:
 
 - Material 3 app shell with Home, Insights, central add action, Reminders, and More.
 - First-run flow from welcome screen to adding the first vehicle.
@@ -30,6 +30,7 @@ Implemented through Milestone 9:
 - Document lifecycle support with active/current documents, archived history, renewal that preserves old records, and deliberate permanent delete.
 - Local file attachments for documents, refuels, services, expenses, and income records, storing metadata in SQLite while copying PDFs/JPG/JPEG/PNG files into DriveTracker-managed app storage.
 - Document expiry reminders derived from recorded expiry dates and shown in the Reminders screen without claiming external verification.
+- Android local notifications for date-based maintenance and document reminders, scheduled from the existing reminder data after the user enables notification permission.
 - Tools entry under More with a polished Fuel Calculator for Trip Cost, Cost Sharing, Fuel Required, and Fuel Price Comparison.
 - Pure calculator domain logic for miles/kilometres, litres/Imperial gallons/US gallons, UK MPG, US MPG, L/100 km, and km/L conversion.
 - Selected-vehicle calculator defaults that can use the current vehicle's latest trustworthy full-to-full fuel economy and latest recorded fuel price, while keeping manual input available and clearly labelled.
@@ -41,11 +42,13 @@ Implemented through Milestone 9:
 - A two-column graphical quick-entry sheet for Refuel, Service, Expense, Income, Odometer, and Maintenance entry points on phone-width layouts.
 - App-wide visual polish across More, Reminders, Maintenance, History activity rows, forms, attachments, settings, and data/storage summaries while preserving existing behavior.
 - Settings foundation for system, light, and dark theme preferences.
+- V1 regional scope is GBP monetary values with per-vehicle miles/kilometres distance units.
+- Secure Android release-signing readiness using an ignored local `android/key.properties` file instead of debug signing release builds.
 - Unit and widget tests for vehicle, odometer, persistence, daily records, service records, maintenance calculations, Home dashboard aggregation, spending trends, History filters, Insights calculations, drill-down, migrations, document lifecycle, attachments, calculator formulas/defaults/UI, data safety, layout states, polish regressions, and important UI flows.
 
 Deferred to later milestones:
 
-- Notifications, sync, accounts, OCR, and external vehicle integrations.
+- XLSX export, PDF vehicle reports, configurable currencies, optional first-run Last Service/MOT/Insurance setup, sync, accounts, OCR, and external vehicle integrations.
 
 ## Technology
 
@@ -55,6 +58,7 @@ Deferred to later milestones:
 - `sqflite_common_ffi` for repository tests and future desktop compatibility
 - `provider` for lightweight app state
 - `path` for database and managed attachment path handling
+- `flutter_local_notifications`, `timezone`, and `flutter_timezone` for Android local reminder notifications
 
 ## Architecture
 
@@ -125,6 +129,29 @@ Calculator results are estimates. They are labelled as based on recorded or manu
 
 Milestone 8 adds local backup, restore, and CSV export without changing the schema beyond V4. Backups use format version 1 and include database data plus managed attachments. Restore inspects the selected backup first, asks for confirmation, creates a safety backup, and only then replaces local data. CSV export is for spreadsheet review and is not a substitute for backups.
 
+Notification schedules are not part of the portable backup format. Reminder data in SQLite remains authoritative; after startup, data reload, or restore, DriveTracker rebuilds local notification schedules from the restored maintenance and document records.
+
+## Local Notifications
+
+DriveTracker V1 supports Android local notifications for date-based reminders. Users enable them from Settings, which requests Android notification permission in context rather than on first launch. If permission is denied or later disabled in Android, in-app reminders continue to work and scheduled local alerts are not treated as enabled.
+
+Date reminders are scheduled for 9:00 AM local time. Maintenance date reminders use the item's existing date warning threshold to choose the first alert day. Document expiry reminders use the existing 30-day expiry reminder window. DriveTracker uses inexact Android scheduling for these ordinary reminders and does not request exact-alarm permission.
+
+Mileage reminders remain in-app for V1. They update when odometer data changes, but DriveTracker does not run continuous background mileage monitoring or claim closed-app mileage notifications.
+
+## Release Signing
+
+Release builds must use a private Android keystore that is not committed. Create `android/key.properties` locally with:
+
+```properties
+storePassword=...
+keyPassword=...
+keyAlias=...
+storeFile=...
+```
+
+Use an absolute `storeFile` path or a path that Gradle can resolve from the Android app module. The file is ignored by git, along with common keystore file extensions. If release signing values are absent, release builds fail clearly instead of falling back to debug signing. Debug builds continue to use the normal debug signing flow.
+
 ## Presentation System
 
 Milestone 9 is a polish milestone. It adds no schema migration, backup-format change, dependency change, calculator formula change, analytics change, or data-path change. The app now uses shared DriveTracker tokens and widgets for category icons, status badges, list cards, metric cards, form sections, and themed surfaces. Visual changes are meant to improve hierarchy, responsiveness, light/dark consistency, and accessibility while continuing to show only real stored or safely derived vehicle data.
@@ -153,4 +180,4 @@ DriveTracker is local-first. It stores vehicle, odometer, refuel, expense, incom
 
 ## Roadmap Summary
 
-Next milestones can add notifications, sync, account-backed optional features, OCR, and external integrations. These should build on the existing repository/service boundaries, schema migration path, backup manifest, and portable relative attachment paths rather than replacing user data.
+Next milestones can add XLSX export, PDF reports, configurable currencies, optional first-run setup prompts, sync, account-backed optional features, OCR, and external integrations. These should build on the existing repository/service boundaries, schema migration path, backup manifest, local-notification scheduler, and portable relative attachment paths rather than replacing user data.

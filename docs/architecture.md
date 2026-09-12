@@ -91,11 +91,11 @@ Refuels and normal services create or update one linked odometer entry with thei
 
 When a refuel, expense, income, or service record with attachments is deleted, its service calls the shared attachment cleanup path after the parent delete succeeds. Attachment metadata is deleted before managed files are removed.
 
-Manual odometer entries remain independent. Unified activity queries show manual odometer entries, but linked refuel/expense/income/service odometer rows are represented by their owning records to avoid duplicate activity.
+Manual odometer entries remain independent. Unified activity queries show manual odometer entries, but linked refuel/expense/income/service odometer rows are represented by their owning records to avoid duplicate activity. Historical manual odometer readings can be edited from History through a controlled form that validates neighbouring chronological readings.
 
 ## Money And Fuel Precision
 
-Persisted money uses integer minor units. The current default presentation is GBP, so `42.75` is stored as `4275` pence. Currency parsing and formatting are centralized in `core/utilities/money.dart` so future currency settings can replace the default without hunting through widgets.
+Persisted money uses integer minor units. The V1 presentation is GBP, so `42.75` is stored as `4275` pence. Currency parsing and formatting are centralized in `core/utilities/money.dart` so future currency settings can replace the default without hunting through widgets.
 
 Fuel volume is stored as integer millilitres. This keeps litre input decimal-friendly while avoiding display-formatted strings as data.
 
@@ -170,6 +170,10 @@ Document expiry reminders follow the same derived-reminder architecture rather t
 
 The Reminders screen renders document reminders beside maintenance reminders and opens the relevant document. Wording says "recorded expiry" or "expires in" and does not claim DriveTracker verified MOT, insurance, tax, ownership, or authenticity.
 
+Android local notifications are a delivery layer on top of the same reminder data. `ReminderNotificationScheduler` rebuilds desired schedules for active vehicles after startup, data reload, and restore. It schedules date-based maintenance reminders from each item's existing date warning threshold and document expiry reminders from the existing 30-day expiry window. Notifications use stable IDs derived from the maintenance item or document ID so schedules can be updated or cancelled without adding Android notification state to the portable schema.
+
+Mileage reminders are deliberately not background scheduled in V1. They continue to update from recorded odometer data inside the app; DriveTracker does not run a closed-app odometer monitor.
+
 ## Documents
 
 `VehicleDocument` is the domain model for user-entered vehicle paperwork. Required fields are vehicle, category, title, and timestamps. Issue date, expiry date, reference number, provider, notes, and attachments are optional. Default UI categories include Insurance, MOT, V5C, Purchase receipt, Warranty, Breakdown cover, Tax, Finance / Lease, and Other, while the category text field keeps custom categories possible.
@@ -199,6 +203,8 @@ Milestone 8 keeps schema version `4` and introduces backup, restore, and CSV exp
 
 Restore is intentionally conservative. The app inspects a selected backup first, displays its manifest facts, requires explicit confirmation, creates a safety backup of the current local state, and then replaces local data. If restore fails, the service preserves the existing data where possible and reports a user-facing `DataSafetyException`. UI polish must not bypass confirmation, alter safety-backup creation, or change the backup manifest contract.
 
+Notification schedules are excluded from backup format version `1`. The restored database is the source of truth; after restore, the controller reloads data and reconciles Android notification schedules from the restored reminders.
+
 ## Financial Aggregation
 
 Vehicle spending is currently:
@@ -221,7 +227,7 @@ Six-month spending trends are fixed local-calendar month buckets ending with the
 - expense/income category
 - text search across stored user-facing text
 
-`ActivityRepository.search` owns the filtering. It queries the source record tables directly, joins category and vehicle metadata where needed, and sorts the unified results by `event_datetime DESC, created_at DESC`. Linked odometer rows from refuels, expenses, income, and services are represented by their owning record, so History does not duplicate financial activity. Manual odometer rows remain visible and open a read-only detail dialog because they do not yet have a separate edit form.
+`ActivityRepository.search` owns the filtering. It queries the source record tables directly, joins category and vehicle metadata where needed, and sorts the unified results by `event_datetime DESC, created_at DESC`. Linked odometer rows from refuels, expenses, income, and services are represented by their owning record, so History does not duplicate financial activity. Manual odometer rows remain visible and open a detail dialog that can launch the controlled historical odometer edit form.
 
 History date filters and Insights ranges share `AnalyticsDateRange`. Ranges use local calendar boundaries and SQL receives UTC ISO strings for the end-exclusive stored comparison. Custom ranges validate `start <= end` and convert the inclusive end day to an end-exclusive boundary.
 
@@ -351,4 +357,5 @@ The Fuel Calculator screen is reached from More -> Fuel Calculator. It presents 
 - No Flutter picker/path/open-file packages were added for Milestone 6. Android-first file selection, managed-root discovery, and external opening use the existing Flutter method-channel capability plus a small Android implementation, keeping `pubspec.yaml` and `pubspec.lock` unchanged.
 - No dependencies were added for Milestone 7. Fuel calculator formulas and UI use Dart, Flutter Material, and existing DriveTracker utilities.
 - No dependencies were added for Milestone 9. Polish work uses Flutter Material, existing widgets, and DriveTracker's shared design tokens.
+- Milestone 10 adds `flutter_local_notifications`, `timezone`, and `flutter_timezone` for Android local reminder notifications. Scheduling remains behind DriveTracker's notification abstraction so reminder business logic is not tied directly to Android plugin APIs.
 - No analytics, telemetry, sync, account, or cloud packages are included.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/calculations/analytics_date_range.dart';
 import '../core/database/app_database.dart';
+import '../core/notifications/local_notification_service.dart';
 import '../core/utilities/validation_exception.dart';
 import '../features/attachments/data/attachment_repository.dart';
 import '../features/attachments/domain/attachment.dart';
@@ -45,6 +46,7 @@ import '../features/odometer/data/odometer_repository.dart';
 import '../features/odometer/domain/odometer_entry.dart';
 import '../features/odometer/domain/odometer_policy.dart';
 import '../features/odometer/domain/odometer_service.dart';
+import '../features/reminders/domain/reminder_notification_scheduler.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/vehicles/data/vehicle_repository.dart';
 import '../features/vehicles/domain/vehicle.dart';
@@ -59,6 +61,7 @@ class DriveTrackerController extends ChangeNotifier {
     AttachmentPicker? attachmentPicker,
     AttachmentOpener? attachmentOpener,
     DataSafetyFileBridge? dataSafetyFileBridge,
+    LocalNotificationClient? notificationClient,
   }) : _database = database,
        _clock = clock ?? DateTime.now,
        _attachmentStorage = attachmentStorage ?? ManagedAttachmentStorage(),
@@ -159,6 +162,14 @@ class DriveTrackerController extends ChangeNotifier {
       fileBridge: dataSafetyFileBridge,
       clock: () => _clock().toUtc(),
     );
+    _notificationScheduler = ReminderNotificationScheduler(
+      client: notificationClient ?? defaultLocalNotificationClient(),
+      vehicleRepository: _vehicleRepository,
+      odometerRepository: _odometerRepository,
+      maintenanceItemService: _maintenanceItemService,
+      documentRepository: _documentRepository,
+      clock: _clock,
+    );
   }
 
   static const _themeSystem = 'system';
@@ -193,11 +204,15 @@ class DriveTrackerController extends ChangeNotifier {
   late final MaintenanceItemService _maintenanceItemService;
   late final ServiceRecordService _serviceRecordService;
   late final DataSafetyService _dataSafetyService;
+  late final ReminderNotificationScheduler _notificationScheduler;
 
   bool _initialized = false;
   bool _busy = false;
   String? _errorMessage;
   ThemeMode _themeMode = ThemeMode.system;
+  bool _localReminderNotificationsEnabled = false;
+  LocalNotificationPermissionStatus _localNotificationPermissionStatus =
+      LocalNotificationPermissionStatus.unsupported;
   List<Vehicle> _activeVehicles = const [];
   List<Vehicle> _archivedVehicles = const [];
   VehicleDashboard? _dashboard;
@@ -212,6 +227,17 @@ class DriveTrackerController extends ChangeNotifier {
   bool get hasAnyVehicles =>
       _activeVehicles.isNotEmpty || _archivedVehicles.isNotEmpty;
   bool get hasActiveVehicles => _activeVehicles.isNotEmpty;
+  bool get localNotificationsSupported => _notificationScheduler.isSupported;
+  bool get localReminderNotificationsEnabled =>
+      _localReminderNotificationsEnabled &&
+      _localNotificationPermissionStatus ==
+          LocalNotificationPermissionStatus.granted;
+  bool get localReminderNotificationsPreferred =>
+      _localReminderNotificationsEnabled;
+  LocalNotificationPermissionStatus get localNotificationPermissionStatus {
+    return _localNotificationPermissionStatus;
+  }
+
   Vehicle? get selectedVehicle => _dashboard?.vehicle;
   int? get currentOdometer => _dashboard?.currentOdometer;
   List<OdometerEntry> get recentOdometerEntries {
@@ -411,10 +437,9 @@ class DriveTrackerController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _themeMode = _themeModeFromStorage(
-        await _settingsRepository.getThemeMode(),
-      );
+      await _loadStoredPreferences();
       await _reloadData();
+      await _reconcileNotificationsBestEffort();
       _errorMessage = null;
     } catch (_) {
       _errorMessage = 'DriveTracker could not load your local data.';
@@ -869,11 +894,14 @@ class DriveTrackerController extends ChangeNotifier {
           path,
           fileName: fileName,
         );
+        await _loadStoredPreferences();
         await _reloadData();
         return result;
       } on DataSafetyException {
         try {
+          await _loadStoredPreferences();
           await _reloadData();
+          await _reconcileNotificationsBestEffort();
         } catch (_) {
           // Preserve the restore failure as the user-facing error.
         }
@@ -889,13 +917,31 @@ class DriveTrackerController extends ChangeNotifier {
     });
   }
 
+  Future<void> setLocalReminderNotificationsEnabled(bool enabled) async {
+    return _runMutation(() async {
+      if (!enabled) {
+        _localReminderNotificationsEnabled = false;
+        await _settingsRepository.setLocalReminderNotificationsEnabled(false);
+        return;
+      }
+
+      final permission = await _notificationScheduler.requestPermission();
+      _localNotificationPermissionStatus = permission;
+      final granted = permission == LocalNotificationPermissionStatus.granted;
+      _localReminderNotificationsEnabled = granted;
+      await _settingsRepository.setLocalReminderNotificationsEnabled(granted);
+    });
+  }
+
   Future<T> _runMutation<T>(Future<T> Function() action) async {
     _busy = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      return await action();
+      final result = await action();
+      await _reconcileNotificationsBestEffort();
+      return result;
     } on ValidationException catch (error) {
       _errorMessage = error.message;
       rethrow;
@@ -908,6 +954,41 @@ class DriveTrackerController extends ChangeNotifier {
     } finally {
       _busy = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadStoredPreferences() async {
+    _themeMode = _themeModeFromStorage(
+      await _settingsRepository.getThemeMode(),
+    );
+    _localReminderNotificationsEnabled = await _settingsRepository
+        .getLocalReminderNotificationsEnabled();
+    await _refreshNotificationStatus();
+  }
+
+  Future<void> _refreshNotificationStatus() async {
+    try {
+      _localNotificationPermissionStatus = await _notificationScheduler
+          .permissionStatus();
+    } catch (_) {
+      _localNotificationPermissionStatus =
+          LocalNotificationPermissionStatus.unsupported;
+    }
+  }
+
+  Future<void> _reconcileNotificationsBestEffort() async {
+    try {
+      final result = await _notificationScheduler.reconcile(
+        enabled: _localReminderNotificationsEnabled,
+      );
+      if (result.scheduled.isNotEmpty ||
+          result.cancelledIds.isNotEmpty ||
+          _localReminderNotificationsEnabled) {
+        await _refreshNotificationStatus();
+      }
+    } catch (_) {
+      _localNotificationPermissionStatus =
+          LocalNotificationPermissionStatus.unsupported;
     }
   }
 
