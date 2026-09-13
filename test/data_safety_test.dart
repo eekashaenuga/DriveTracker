@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
+import 'package:drivetracker/app/app.dart';
 import 'package:drivetracker/app/app_controller.dart';
 import 'package:drivetracker/app/theme/dt_theme.dart';
 import 'package:drivetracker/core/database/database_migrations.dart';
+import 'package:drivetracker/core/notifications/local_notification_service.dart';
 import 'package:drivetracker/features/attachments/domain/attachment.dart';
 import 'package:drivetracker/features/attachments/domain/attachment_io.dart';
 import 'package:drivetracker/features/daily_records/domain/expense.dart';
@@ -524,6 +526,194 @@ void main() {
     });
   });
 
+  group('Welcome clean-install restore', () {
+    testWidgets(
+      'shows restore action beside first vehicle CTA on narrow width',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final services = await _createWidgetServices(tester);
+        final bridge = FakeDataSafetyFileBridge();
+
+        await _pumpWelcomeApp(tester, services, bridge);
+
+        expect(find.byKey(const Key('addFirstVehicleButton')), findsOneWidget);
+        expect(
+          find.byKey(const Key('welcomeRestoreBackupButton')),
+          findsOneWidget,
+        );
+        expect(find.text('Add your first vehicle'), findsOneWidget);
+        expect(find.text('Restore from backup'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'cancelled picker leaves Welcome intact without creating data',
+      (tester) async {
+        final services = await _createWidgetServices(tester);
+        final bridge = FakeDataSafetyFileBridge();
+
+        await _pumpWelcomeApp(tester, services, bridge);
+        await _tapAndRunAsync(
+          tester,
+          find.byKey(const Key('welcomeRestoreBackupButton')),
+        );
+        await tester.pump();
+
+        expect(bridge.pickCount, 1);
+        expect(find.byKey(const Key('addFirstVehicleButton')), findsOneWidget);
+        expect(
+          find.byKey(const Key('welcomeRestoreBackupButton')),
+          findsOneWidget,
+        );
+        expect(find.byType(SnackBar), findsNothing);
+        expect(
+          await _runWidgetAsync(tester, services.vehicles.listActive),
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets('invalid selected backup keeps clean install recoverable', (
+      tester,
+    ) async {
+      final services = await _createWidgetServices(tester);
+      final invalidDir = await _createWidgetTempDirectory(
+        tester,
+        'dt_welcome_invalid_restore_',
+      );
+      addTearDown(() async {
+        if (await invalidDir.exists()) {
+          await invalidDir.delete(recursive: true);
+        }
+      });
+      final invalidBackup = File(p.join(invalidDir.path, 'broken.dtbackup'));
+      await _runWidgetAsync(
+        tester,
+        () => invalidBackup.writeAsString('not a backup', flush: true),
+      );
+      final bridge = FakeDataSafetyFileBridge()
+        ..nextBackup = PickedBackupFile(
+          sourcePath: invalidBackup.path,
+          fileName: 'broken.dtbackup',
+        );
+
+      await _pumpWelcomeApp(tester, services, bridge);
+      await _tapAndRunAsync(
+        tester,
+        find.byKey(const Key('welcomeRestoreBackupButton')),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.text('Backup file is not a valid DriveTracker backup.'),
+      );
+
+      expect(find.byKey(const Key('addFirstVehicleButton')), findsOneWidget);
+      expect(
+        find.byKey(const Key('welcomeRestoreBackupButton')),
+        findsOneWidget,
+      );
+      expect(
+        await _runWidgetAsync(tester, services.vehicles.listActive),
+        isEmpty,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
+
+    testWidgets(
+      'successful restore exits onboarding and reconciles reminders',
+      (tester) async {
+        final source = await _createWidgetServices(tester);
+        late MaintenanceItem item;
+        await tester.runAsync(() async {
+          final vehicle = await source.vehicleService.addVehicle(
+            _vehicleDraft('Restored Fiesta'),
+          );
+          item = await source.maintenanceItemService.createMaintenanceItem(
+            MaintenanceItemDraft(
+              vehicleId: vehicle.id,
+              name: 'Engine Oil',
+              timeIntervalDays: 365,
+              dateWarningDays: 30,
+            ),
+          );
+          await source.serviceRecordService.createBaselineCompletion(
+            item: item,
+            eventDateTime: DateTime.utc(2025, 10, 1, 12),
+            odometer: 10000,
+          );
+          await source.settings.setLocalReminderNotificationsEnabled(true);
+        });
+        final output = await _createWidgetTempDirectory(
+          tester,
+          'dt_welcome_restore_',
+        );
+        addTearDown(() async {
+          if (await output.exists()) {
+            await output.delete(recursive: true);
+          }
+        });
+        final backup = await _runWidgetAsync(
+          tester,
+          () =>
+              _dataSafetyService(source).createBackup(outputDirectory: output),
+        );
+        final target = await _createWidgetServices(tester);
+        final notifications = FakeLocalNotificationClient();
+        final bridge = FakeDataSafetyFileBridge()
+          ..nextBackup = PickedBackupFile(
+            sourcePath: backup.file.path,
+            fileName: backup.suggestedName,
+          );
+
+        final controller = await _pumpWelcomeApp(
+          tester,
+          target,
+          bridge,
+          notificationClient: notifications,
+          now: DateTime(2026, 9, 1, 8),
+        );
+        await _tapAndRunAsync(
+          tester,
+          find.byKey(const Key('welcomeRestoreBackupButton')),
+        );
+        await _pumpUntilFound(
+          tester,
+          find.byKey(const Key('restoreBackupConfirmDialog')),
+        );
+        await _tapAndRunAsync(
+          tester,
+          find.byKey(const Key('confirmRestoreBackupButton')),
+        );
+        await _pumpUntilAsync(
+          tester,
+          () async =>
+              controller.hasAnyVehicles &&
+              controller.selectedVehicle?.name == 'Restored Fiesta',
+        );
+        await _pumpUntilFound(tester, find.text('Restored Fiesta'));
+
+        expect(find.byKey(const Key('addFirstVehicleButton')), findsNothing);
+        expect(controller.localReminderNotificationsEnabled, isTrue);
+        expect(find.text('Restored Fiesta'), findsWidgets);
+        expect(notifications.scheduled, hasLength(1));
+        expect(
+          notifications.scheduled.single.stableId,
+          'maintenance_date_${item.id}',
+        );
+        expect(
+          notifications.scheduled.single.body,
+          'Restored Fiesta - Engine Oil due on 1 Oct 2026',
+        );
+        expect(await notifications.pendingNotificationIds(), [
+          notifications.scheduled.single.id,
+        ]);
+      },
+    );
+  });
+
   group('Data & Storage screen', () {
     testWidgets('is reachable from More', (tester) async {
       final services = await _createWidgetServices(tester);
@@ -692,9 +882,9 @@ void main() {
         tester,
         find.byKey(const Key('confirmRestoreBackupButton')),
       );
-      await _pumpUntil(
+      await _pumpUntilFoundAfterAsyncWork(
         tester,
-        () => tester.any(find.textContaining('Restore complete')),
+        find.textContaining('Restore complete'),
       );
 
       final vehicles = await _runWidgetAsync(
@@ -756,6 +946,33 @@ DriveTrackerController _controller(
   );
 }
 
+Future<DriveTrackerController> _pumpWelcomeApp(
+  WidgetTester tester,
+  TestServices services,
+  FakeDataSafetyFileBridge bridge, {
+  LocalNotificationClient? notificationClient,
+  DateTime? now,
+}) async {
+  final controller = DriveTrackerController(
+    database: services.database,
+    attachmentStorage: _storage(services),
+    attachmentPicker: services.attachmentPicker,
+    attachmentOpener: services.attachmentOpener,
+    dataSafetyFileBridge: bridge,
+    notificationClient: notificationClient,
+    clock: now == null ? null : () => now,
+  );
+  await tester.runAsync(controller.initialize);
+  await tester.pumpWidget(
+    DriveTrackerApp(database: services.database, controller: controller),
+  );
+  await _pumpUntilFound(
+    tester,
+    find.byKey(const Key('welcomeRestoreBackupButton')),
+  );
+  return controller;
+}
+
 Future<void> _pumpDataStorage(
   WidgetTester tester,
   TestServices services,
@@ -808,6 +1025,26 @@ Future<void> _pumpUntilFound(
   return _pumpUntil(tester, () => tester.any(finder), attempts: attempts);
 }
 
+Future<void> _pumpUntilFoundAfterAsyncWork(
+  WidgetTester tester,
+  Finder finder, {
+  int attempts = 300,
+}) async {
+  for (var attempt = 0; attempt < attempts; attempt += 1) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (tester.any(finder)) {
+      return;
+    }
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    if (tester.any(finder)) {
+      return;
+    }
+  }
+  expect(finder, findsWidgets);
+}
+
 Future<void> _pumpUntil(
   WidgetTester tester,
   bool Function() condition, {
@@ -824,6 +1061,24 @@ Future<void> _pumpUntil(
     }
   }
   expect(condition(), isTrue);
+}
+
+Future<void> _pumpUntilAsync(
+  WidgetTester tester,
+  Future<bool> Function() condition, {
+  int attempts = 200,
+}) async {
+  final matched = await tester.runAsync(() async {
+    for (var attempt = 0; attempt < attempts; attempt += 1) {
+      if (await condition()) {
+        return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return condition();
+  });
+  expect(matched, isTrue);
+  await tester.pump();
 }
 
 Future<void> _tapAndRunAsync(WidgetTester tester, Finder finder) async {
@@ -1100,9 +1355,11 @@ class FakeDataSafetyFileBridge implements DataSafetyFileBridge {
   final savedFiles = <_SavedFile>[];
   PickedBackupFile? nextBackup;
   bool cancelSave = false;
+  int pickCount = 0;
 
   @override
   Future<PickedBackupFile?> pickBackupFile() async {
+    pickCount += 1;
     final picked = nextBackup;
     nextBackup = null;
     return picked;
@@ -1143,6 +1400,45 @@ class _SavedFile {
   final String savedPath;
   final String suggestedName;
   final String mimeType;
+}
+
+class FakeLocalNotificationClient implements LocalNotificationClient {
+  LocalNotificationPermissionStatus permission =
+      LocalNotificationPermissionStatus.granted;
+  final pending = <int, LocalNotificationRequest?>{};
+  final scheduled = <LocalNotificationRequest>[];
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<LocalNotificationPermissionStatus> permissionStatus() async {
+    return permission;
+  }
+
+  @override
+  Future<LocalNotificationPermissionStatus> requestPermission() async {
+    return permission;
+  }
+
+  @override
+  Future<List<int>> pendingNotificationIds() async {
+    return pending.keys.toList()..sort();
+  }
+
+  @override
+  Future<void> schedule(LocalNotificationRequest request) async {
+    scheduled.add(request);
+    pending[request.id] = request;
+  }
+
+  @override
+  Future<void> cancel(int id) async {
+    pending.remove(id);
+  }
 }
 
 class _SeededData {

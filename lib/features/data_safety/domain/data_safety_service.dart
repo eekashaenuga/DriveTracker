@@ -826,6 +826,11 @@ class DataSafetyService {
           }
         },
       );
+      if (archive.isEmpty) {
+        throw const DataSafetyException(
+          'Backup file is not a valid DriveTracker backup.',
+        );
+      }
       if (duplicateNames.isNotEmpty) {
         throw DataSafetyException(
           'Backup contains duplicate entry "${duplicateNames.first}".',

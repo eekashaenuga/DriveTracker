@@ -129,6 +129,8 @@ Calculator results are estimates. They are labelled as based on recorded or manu
 
 Milestone 8 adds local backup, restore, and CSV export without changing the schema beyond V4. Backups use format version 1 and include database data plus managed attachments. Restore inspects the selected backup first, asks for confirmation, creates a safety backup, and only then replaces local data. CSV export is for spreadsheet review and is not a substitute for backups.
 
+Clean installations can restore an existing `.dtbackup` directly from the Welcome screen before any vehicle has been added.
+
 Notification schedules are not part of the portable backup format. Reminder data in SQLite remains authoritative; after startup, data reload, or restore, DriveTracker rebuilds local notification schedules from the restored maintenance and document records.
 
 ## Local Notifications
