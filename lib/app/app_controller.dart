@@ -238,6 +238,14 @@ class DriveTrackerController extends ChangeNotifier {
     return _localNotificationPermissionStatus;
   }
 
+  void clearError() {
+    if (_errorMessage == null) {
+      return;
+    }
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   Vehicle? get selectedVehicle => _dashboard?.vehicle;
   int? get currentOdometer => _dashboard?.currentOdometer;
   List<OdometerEntry> get recentOdometerEntries {
