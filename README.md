@@ -154,6 +154,10 @@ storeFile=...
 
 Use an absolute `storeFile` path or a path that Gradle can resolve from the Android app module. The file is ignored by git, along with common keystore file extensions. If release signing values are absent, release builds fail clearly instead of falling back to debug signing. Debug builds continue to use the normal debug signing flow.
 
+For Android upgrades, v1.1.0 must keep the published application id `com.eekashaenuga.drivetracker`, use a `versionCode` greater than v1.0.0's `1`, and be signed with the same private keystore/key alias used for the v1.0.0 release. Changing the application id or signing certificate makes Android treat the build as a different or incompatible app, which prevents an in-place upgrade and can leave existing app data inaccessible.
+
+Android splash resources can be updated safely as presentation-only resources. They should not change `applicationId`, release signing, or the monotonic `versionCode` requirements above.
+
 ## Presentation System
 
 Milestone 9 is a polish milestone. It adds no schema migration, backup-format change, dependency change, calculator formula change, analytics change, or data-path change. The app now uses shared DriveTracker tokens and widgets for category icons, status badges, list cards, metric cards, form sections, and themed surfaces. Visual changes are meant to improve hierarchy, responsiveness, light/dark consistency, and accessibility while continuing to show only real stored or safely derived vehicle data.

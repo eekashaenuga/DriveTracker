@@ -29,6 +29,8 @@ import '../../features/vehicles/domain/vehicle.dart';
 import '../../features/vehicles/presentation/vehicle_details_screen.dart';
 import '../../features/vehicles/presentation/vehicle_form_screen.dart';
 import '../../features/vehicles/presentation/vehicles_screen.dart';
+import '../../shared/widgets/dt_motion.dart';
+import '../theme/dt_tokens.dart';
 
 class AppNavigation {
   const AppNavigation._();
@@ -37,72 +39,54 @@ class AppNavigation {
     BuildContext context, {
     bool firstVehicle = false,
   }) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => VehicleFormScreen(firstVehicle: firstVehicle),
-      ),
+    return _push<void>(
+      context,
+      (_) => VehicleFormScreen(firstVehicle: firstVehicle),
     );
   }
 
   static Future<void> openEditVehicle(BuildContext context, Vehicle vehicle) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => VehicleFormScreen(vehicle: vehicle),
-      ),
-    );
+    return _push<void>(context, (_) => VehicleFormScreen(vehicle: vehicle));
   }
 
   static Future<void> openVehicleDetails(
     BuildContext context,
     Vehicle vehicle,
   ) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => VehicleDetailsScreen(vehicleId: vehicle.id),
-      ),
+    return _push<void>(
+      context,
+      (_) => VehicleDetailsScreen(vehicleId: vehicle.id),
     );
   }
 
   static Future<void> openVehicles(BuildContext context) {
-    return Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => const VehiclesScreen()));
+    return _push<void>(context, (_) => const VehiclesScreen());
   }
 
   static Future<void> openUpdateOdometer(BuildContext context) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const UpdateOdometerScreen()),
-    );
+    return _push<void>(context, (_) => const UpdateOdometerScreen());
   }
 
   static Future<void> openEditOdometerEntry(
     BuildContext context,
     OdometerEntry entry,
   ) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => OdometerEntryFormScreen(entry: entry),
-      ),
+    return _push<void>(
+      context,
+      (_) => OdometerEntryFormScreen(entry: entry),
     );
   }
 
   static Future<void> openRefuel(BuildContext context, {Refuel? refuel}) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => RefuelFormScreen(refuel: refuel)),
-    );
+    return _push<void>(context, (_) => RefuelFormScreen(refuel: refuel));
   }
 
   static Future<void> openExpense(BuildContext context, {Expense? expense}) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ExpenseFormScreen(expense: expense),
-      ),
-    );
+    return _push<void>(context, (_) => ExpenseFormScreen(expense: expense));
   }
 
   static Future<void> openIncome(BuildContext context, {Income? income}) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => IncomeFormScreen(income: income)),
-    );
+    return _push<void>(context, (_) => IncomeFormScreen(income: income));
   }
 
   static Future<void> openService(
@@ -110,43 +94,34 @@ class AppNavigation {
     ServiceRecordWithItems? service,
     String? preselectedMaintenanceItemId,
   }) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ServiceFormScreen(
-          service: service,
-          preselectedMaintenanceItemId: preselectedMaintenanceItemId,
-        ),
+    return _push<void>(
+      context,
+      (_) => ServiceFormScreen(
+        service: service,
+        preselectedMaintenanceItemId: preselectedMaintenanceItemId,
       ),
     );
   }
 
   static Future<void> openMaintenance(BuildContext context) {
-    return Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const MaintenanceScreen()));
+    return _push<void>(context, (_) => const MaintenanceScreen());
   }
 
   static Future<void> openDocuments(BuildContext context) {
-    return Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => const DocumentsScreen()));
+    return _push<void>(context, (_) => const DocumentsScreen());
   }
 
   static Future<VehicleDocument?> openAddDocument(BuildContext context) {
-    return Navigator.of(context).push<VehicleDocument>(
-      MaterialPageRoute<VehicleDocument>(
-        builder: (_) => const DocumentFormScreen(),
-      ),
-    );
+    return _push<VehicleDocument>(context, (_) => const DocumentFormScreen());
   }
 
   static Future<VehicleDocument?> openEditDocument(
     BuildContext context,
     VehicleDocument document,
   ) {
-    return Navigator.of(context).push<VehicleDocument>(
-      MaterialPageRoute<VehicleDocument>(
-        builder: (_) => DocumentFormScreen(document: document),
-      ),
+    return _push<VehicleDocument>(
+      context,
+      (_) => DocumentFormScreen(document: document),
     );
   }
 
@@ -154,10 +129,9 @@ class AppNavigation {
     BuildContext context,
     VehicleDocument document,
   ) {
-    return Navigator.of(context).push<VehicleDocument>(
-      MaterialPageRoute<VehicleDocument>(
-        builder: (_) => DocumentFormScreen(renewingFrom: document),
-      ),
+    return _push<VehicleDocument>(
+      context,
+      (_) => DocumentFormScreen(renewingFrom: document),
     );
   }
 
@@ -165,29 +139,23 @@ class AppNavigation {
     BuildContext context,
     String documentId,
   ) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => DocumentDetailsScreen(documentId: documentId),
-      ),
+    return _push<void>(
+      context,
+      (_) => DocumentDetailsScreen(documentId: documentId),
     );
   }
 
   static Future<void> openAddMaintenanceItem(BuildContext context) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const MaintenanceItemFormScreen(),
-      ),
-    );
+    return _push<void>(context, (_) => const MaintenanceItemFormScreen());
   }
 
   static Future<void> openEditMaintenanceItem(
     BuildContext context,
     MaintenanceItem item,
   ) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => MaintenanceItemFormScreen(item: item),
-      ),
+    return _push<void>(
+      context,
+      (_) => MaintenanceItemFormScreen(item: item),
     );
   }
 
@@ -195,10 +163,9 @@ class AppNavigation {
     BuildContext context,
     String itemId,
   ) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => MaintenanceItemDetailsScreen(itemId: itemId),
-      ),
+    return _push<void>(
+      context,
+      (_) => MaintenanceItemDetailsScreen(itemId: itemId),
     );
   }
 
@@ -206,33 +173,53 @@ class AppNavigation {
     BuildContext context, {
     HistoryFilter? filter,
   }) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => HistoryScreen(initialFilter: filter),
-      ),
+    return _push<void>(
+      context,
+      (_) => HistoryScreen(initialFilter: filter),
     );
   }
 
   static Future<void> openSettings(BuildContext context) {
-    return Navigator.of(context)
-        .push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen()));
+    return _push<void>(context, (_) => const SettingsScreen());
   }
 
   static Future<void> openVehicleUnits(BuildContext context) {
-    return Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const VehicleUnitsScreen()));
+    return _push<void>(context, (_) => const VehicleUnitsScreen());
   }
 
   static Future<void> openDataStorage(BuildContext context) {
-    return Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const DataStorageScreen()));
+    return _push<void>(context, (_) => const DataStorageScreen());
   }
 
   static Future<void> openFuelCalculator(BuildContext context) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const FuelCalculatorScreen()),
+    return _push<void>(context, (_) => const FuelCalculatorScreen());
+  }
+
+  static Future<T?> _push<T>(BuildContext context, WidgetBuilder builder) {
+    return Navigator.of(context).push(_route<T>(builder));
+  }
+
+  static PageRoute<T> _route<T>(WidgetBuilder builder) {
+    return PageRouteBuilder<T>(
+      transitionDuration: DTDurations.normal,
+      reverseTransitionDuration: DTDurations.fast,
+      pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        if (DTMotion.reduceMotion(context)) {
+          return child;
+        }
+        final fade = animation.drive(CurveTween(curve: DTMotion.standardCurve));
+        final slide = animation.drive(
+          Tween<Offset>(
+            begin: const Offset(0.045, 0),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: DTMotion.standardCurve)),
+        );
+        return FadeTransition(
+          opacity: fade,
+          child: SlideTransition(position: slide, child: child),
+        );
+      },
     );
   }
 }

@@ -238,10 +238,10 @@ class AppDatabase {
 
   Future<void> _reopenAndVerify() async {
     final db = await _openForLifecycle();
-    final rows = await db.rawQuery('PRAGMA user_version');
-    if (rows.isEmpty || rows.first.values.first is! int) {
-      throw StateError('SQLite schema version could not be verified.');
-    }
+    await DatabaseMigrations.validateSchema(
+      db,
+      expectedVersion: DatabaseMigrations.schemaVersion,
+    );
   }
 
   int _pragmaInt(Object? value) {
@@ -257,7 +257,7 @@ class AppDatabase {
   Future<sqflite.Database> _open() async {
     final path = await _resolvedPath();
 
-    return _databaseFactory.openDatabase(
+    final db = await _databaseFactory.openDatabase(
       path,
       options: sqflite.OpenDatabaseOptions(
         version: DatabaseMigrations.schemaVersion,
@@ -268,6 +268,16 @@ class AppDatabase {
         onUpgrade: DatabaseMigrations.migrate,
       ),
     );
+    try {
+      await DatabaseMigrations.validateSchema(
+        db,
+        expectedVersion: DatabaseMigrations.schemaVersion,
+      );
+      return db;
+    } catch (_) {
+      await db.close();
+      rethrow;
+    }
   }
 
   Future<String> _resolvedPath() async {

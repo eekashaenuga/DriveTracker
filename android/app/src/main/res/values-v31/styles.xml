@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ system splash while the process is starting. Keep package
+         identity and signing config in Gradle unchanged for upgrade compatibility. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@android:color/white</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowLightSplashScreen">true</item>
+        <item name="android:postSplashScreenTheme">@style/NormalTheme</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+</resources>

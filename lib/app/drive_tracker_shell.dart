@@ -7,6 +7,7 @@ import '../features/reminders/presentation/reminders_screen.dart';
 import '../shared/widgets/dt_bottom_sheet.dart';
 import '../shared/widgets/dt_category_icon.dart';
 import 'router/app_navigation.dart';
+import 'theme/dt_motion.dart';
 import 'theme/dt_tokens.dart';
 
 class DriveTrackerShell extends StatefulWidget {
@@ -107,9 +108,7 @@ class _ActionFabState extends State<_ActionFab> {
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.maybeOf(context);
-    final reduceMotion =
-        media?.disableAnimations == true || media?.accessibleNavigation == true;
+    final reduceMotion = DTMotion.reduceMotionOf(context);
 
     return GestureDetector(
       onTapDown: (_) => _setPressed(true),
@@ -117,7 +116,7 @@ class _ActionFabState extends State<_ActionFab> {
       onTapUp: (_) => _setPressed(false),
       child: AnimatedScale(
         scale: _pressed && !reduceMotion ? 0.94 : 1,
-        duration: reduceMotion ? Duration.zero : DTDurations.fast,
+        duration: DTMotion.durationOf(context, DTDurations.fast),
         curve: Curves.easeOutCubic,
         child: FloatingActionButton(
           key: const Key('mainActionButton'),

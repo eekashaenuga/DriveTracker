@@ -1,4 +1,5 @@
 import '../../../core/notifications/local_notification_service.dart';
+import '../../../core/product_identity.dart';
 import '../../documents/data/document_repository.dart';
 import '../../documents/domain/vehicle_document.dart';
 import '../../maintenance/domain/maintenance_item_service.dart';
@@ -148,7 +149,7 @@ class ReminderNotificationScheduler {
     return LocalNotificationRequest(
       id: notificationIdForStableId(stableId),
       stableId: stableId,
-      title: 'DriveTracker',
+      title: ProductIdentity.name,
       body:
           '${vehicle.name} - ${reminder.item.name} '
           '${_duePhrase(dueDate, now)}',
@@ -172,7 +173,7 @@ class ReminderNotificationScheduler {
     return LocalNotificationRequest(
       id: notificationIdForStableId(stableId),
       stableId: stableId,
-      title: 'DriveTracker',
+      title: ProductIdentity.name,
       body:
           '${vehicle.name} - ${document.category} '
           '${_expiryPhrase(dueDate, now)}',

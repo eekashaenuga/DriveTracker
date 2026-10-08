@@ -206,21 +206,6 @@ class DataSafetyService {
   static const databaseArchivePath = 'database.sqlite';
   static const attachmentsRoot = 'attachments';
 
-  static const _allTables = [
-    'vehicles',
-    'odometer_entries',
-    'app_settings',
-    'record_categories',
-    'refuels',
-    'expenses',
-    'income_records',
-    'maintenance_items',
-    'services',
-    'service_items',
-    'documents',
-    'attachments',
-  ];
-
   final AppDatabase database;
   final AttachmentStorage attachmentStorage;
   final DataSafetyFileBridge _fileBridge;
@@ -889,18 +874,15 @@ class DataSafetyService {
         'Backup schema version $schemaVersion is not supported.',
       );
     }
-    final requiredTables = _requiredTablesFor(schemaVersion);
-    final rows = await db.query(
-      'sqlite_master',
-      columns: ['name'],
-      where: 'type = ?',
-      whereArgs: ['table'],
-    );
-    final tableNames = rows.map((row) => row['name'] as String).toSet();
-    for (final table in requiredTables) {
-      if (!tableNames.contains(table)) {
-        throw DataSafetyException('Backup database is missing table "$table".');
-      }
+    try {
+      await DatabaseMigrations.validateSchema(
+        db,
+        expectedVersion: schemaVersion,
+      );
+    } on StateError {
+      throw const DataSafetyException(
+        'Backup database schema is incomplete.',
+      );
     }
     final integrityRows = await db.rawQuery('PRAGMA integrity_check');
     final integrity = integrityRows.isEmpty
@@ -957,16 +939,7 @@ class DataSafetyService {
   }
 
   List<String> _requiredTablesFor(int schemaVersion) {
-    if (schemaVersion >= 4) {
-      return _allTables;
-    }
-    if (schemaVersion == 3) {
-      return _allTables.take(10).toList();
-    }
-    if (schemaVersion == 2) {
-      return _allTables.take(7).toList();
-    }
-    return _allTables.take(3).toList();
+    return DatabaseMigrations.requiredTablesFor(schemaVersion);
   }
 
   Future<List<String>> _columnsFor(

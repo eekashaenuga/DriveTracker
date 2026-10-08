@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:drivetracker/app/app.dart';
 import 'package:drivetracker/app/app_controller.dart';
+import 'package:drivetracker/app/drive_tracker_shell.dart';
+import 'package:drivetracker/app/theme/dt_tokens.dart';
 import 'package:drivetracker/app/theme/dt_theme.dart';
 import 'package:drivetracker/features/attachments/domain/attachment.dart';
 import 'package:drivetracker/features/attachments/domain/attachment_io.dart';
@@ -946,6 +948,83 @@ void main() {
 
     expect(find.text('Commuter'), findsWidgets);
     expect(find.text('64,000 mi'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('central action suppresses press scale for reduced motion', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    await tester.runAsync(() async {
+      await services.vehicleService.addVehicle(_draft('Commuter', 64000));
+    });
+    final controller = DriveTrackerController(database: services.database);
+    addTearDown(controller.dispose);
+    await tester.runAsync(controller.initialize);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: DTTheme.light(),
+        home: ChangeNotifierProvider.value(
+          value: controller,
+          child: const MediaQuery(
+            data: MediaQueryData(disableAnimations: true),
+            child: DriveTrackerShell(),
+          ),
+        ),
+      ),
+    );
+    await _pumpUntilFound(tester, find.byKey(const Key('mainActionButton')));
+
+    expect(_mainActionScale(tester).duration, Duration.zero);
+    expect(_mainActionScale(tester).scale, 1);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('mainActionButton'))),
+    );
+    await tester.pump();
+
+    expect(_mainActionScale(tester).duration, Duration.zero);
+    expect(_mainActionScale(tester).scale, 1);
+
+    await gesture.up();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('central action keeps press scale when motion is allowed', (
+    tester,
+  ) async {
+    final services = createTestServices();
+    await tester.runAsync(() async {
+      await services.vehicleService.addVehicle(_draft('Commuter', 64000));
+    });
+    final controller = DriveTrackerController(database: services.database);
+    addTearDown(controller.dispose);
+    await tester.runAsync(controller.initialize);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: DTTheme.light(),
+        home: ChangeNotifierProvider.value(
+          value: controller,
+          child: const DriveTrackerShell(),
+        ),
+      ),
+    );
+    await _pumpUntilFound(tester, find.byKey(const Key('mainActionButton')));
+
+    expect(_mainActionScale(tester).duration, DTDurations.fast);
+    expect(_mainActionScale(tester).scale, 1);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('mainActionButton'))),
+    );
+    await tester.pump();
+
+    expect(_mainActionScale(tester).duration, DTDurations.fast);
+    expect(_mainActionScale(tester).scale, 0.94);
+
+    await gesture.up();
     expect(tester.takeException(), isNull);
   });
 
@@ -2325,6 +2404,12 @@ Future<DriveTrackerController> _pumpApp(
   );
   await _pumpUntilFound(tester, readyFinder);
   return controller;
+}
+
+AnimatedScale _mainActionScale(WidgetTester tester) {
+  final scale = find.byType(AnimatedScale);
+  expect(scale, findsOneWidget);
+  return tester.widget<AnimatedScale>(scale);
 }
 
 Future<void> _enterVehicle(

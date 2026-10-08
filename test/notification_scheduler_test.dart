@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drivetracker/app/app_controller.dart';
@@ -407,7 +408,7 @@ void main() {
   });
 
   group('DriveTrackerController notifications', () {
-    test('startup reconciles stored notification preference', () async {
+    test('startup reconciles stored notification preference after first load', () async {
       final services = createTestServices();
       final vehicle = await _addVehicle(services);
       final item = await _addDateMaintenanceItem(services, vehicle);
@@ -420,7 +421,11 @@ void main() {
         isBaseline: true,
       );
       await services.settings.setLocalReminderNotificationsEnabled(true);
-      final client = FakeLocalNotificationClient();
+      final permissionStatusBlocker = Completer<void>();
+      final initializeBlocker = Completer<void>();
+      final client = FakeLocalNotificationClient()
+        ..permissionStatusBlocker = permissionStatusBlocker
+        ..initializeBlocker = initializeBlocker;
       final controller = DriveTrackerController(
         database: services.database,
         notificationClient: client,
@@ -429,6 +434,14 @@ void main() {
       addTearDown(controller.dispose);
 
       await controller.initialize();
+
+      expect(controller.initialized, isTrue);
+      expect(controller.localReminderNotificationsPreferred, isTrue);
+      expect(client.scheduled, isEmpty);
+
+      permissionStatusBlocker.complete();
+      initializeBlocker.complete();
+      await pumpEventQueue(times: 20);
 
       expect(controller.localReminderNotificationsEnabled, isTrue);
       expect(client.scheduled, hasLength(1));
@@ -617,6 +630,8 @@ class FakeLocalNotificationClient implements LocalNotificationClient {
   final pending = <int, LocalNotificationRequest?>{};
   final scheduled = <LocalNotificationRequest>[];
   final cancelled = <int>[];
+  Completer<void>? initializeBlocker;
+  Completer<void>? permissionStatusBlocker;
   var initializeCount = 0;
 
   @override
@@ -625,10 +640,12 @@ class FakeLocalNotificationClient implements LocalNotificationClient {
   @override
   Future<void> initialize() async {
     initializeCount += 1;
+    await initializeBlocker?.future;
   }
 
   @override
   Future<LocalNotificationPermissionStatus> permissionStatus() async {
+    await permissionStatusBlocker?.future;
     return permission;
   }
 

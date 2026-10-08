@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/product_identity.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
 import '../../data_safety/domain/data_safety_service.dart';
 import '../../data_safety/presentation/restore_backup_flow.dart';
@@ -56,7 +57,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         Icon(Icons.route_rounded, size: 48, color: theme.colorScheme.primary),
         const SizedBox(height: DTSpacing.xl),
         Text(
-          'DriveTracker',
+          ProductIdentity.name,
           style: theme.textTheme.displaySmall?.copyWith(
             fontWeight: FontWeight.w900,
           ),
@@ -94,7 +95,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         ),
         const SizedBox(height: DTSpacing.md),
         Text(
-          'Already use DriveTracker? Restore an existing backup.',
+          'Already use ${ProductIdentity.name}? Restore an existing backup.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

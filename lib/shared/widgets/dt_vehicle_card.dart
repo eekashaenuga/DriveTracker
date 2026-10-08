@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme/dt_tokens.dart';
 import '../../features/vehicles/domain/vehicle.dart';
 import 'dt_category_icon.dart';
+import 'dt_motion.dart';
 import 'dt_status_badge.dart';
 
 class DTVehicleCard extends StatelessWidget {
@@ -24,79 +25,91 @@ class DTVehicleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final backgroundColor = isSelected
+        ? theme.colorScheme.primaryContainer.withValues(alpha: 0.55)
+        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.42);
 
-    return Material(
-      color: isSelected
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.55)
-          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
-      borderRadius: DTRadii.cardRadius,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: DTRadii.cardRadius,
-        child: Padding(
-          padding: const EdgeInsets.all(DTSpacing.lg),
-          child: Row(
-            children: [
-              DTCategoryIcon(
-                icon: Icons.directions_car_rounded,
-                color: isSelected
-                    ? theme.colorScheme.primary
-                    : DTAccents.odometer(context),
-              ),
-              const SizedBox(width: DTSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+    return DTPressable(
+      enabled: onTap != null,
+      child: AnimatedContainer(
+        duration: DTMotion.duration(context, DTDurations.normal),
+        curve: DTMotion.standardCurve,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: DTRadii.cardRadius,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: DTRadii.cardRadius,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: DTRadii.cardRadius,
+            child: Padding(
+              padding: const EdgeInsets.all(DTSpacing.lg),
+              child: Row(
+                children: [
+                  DTCategoryIcon(
+                    icon: Icons.directions_car_rounded,
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : DTAccents.odometer(context),
+                  ),
+                  const SizedBox(width: DTSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            vehicle.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                vehicle.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
+                            if (isSelected) ...[
+                              const SizedBox(width: DTSpacing.sm),
+                              DTStatusBadge(
+                                label: 'Selected',
+                                color: theme.colorScheme.primary,
+                                icon: Icons.check_circle_rounded,
+                                compact: true,
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: DTSpacing.xs),
+                        Text(
+                          vehicle.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        if (isSelected) ...[
-                          const SizedBox(width: DTSpacing.sm),
-                          DTStatusBadge(
-                            label: 'Selected',
-                            color: theme.colorScheme.primary,
-                            icon: Icons.check_circle_rounded,
-                            compact: true,
+                        const SizedBox(height: DTSpacing.xs),
+                        Text(
+                          currentOdometerLabel ?? vehicle.registrationLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
-                        ],
+                        ),
                       ],
                     ),
-                    const SizedBox(height: DTSpacing.xs),
-                    Text(
-                      vehicle.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: DTSpacing.xs),
-                    Text(
-                      currentOdometerLabel ?? vehicle.registrationLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: DTSpacing.sm),
+                    trailing!,
                   ],
-                ),
+                ],
               ),
-              if (trailing != null) ...[
-                const SizedBox(width: DTSpacing.sm),
-                trailing!,
-              ],
-            ],
+            ),
           ),
         ),
       ),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../app/app_controller.dart';
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/product_identity.dart';
 import '../../../core/utilities/formatters.dart';
 import '../../../shared/widgets/dt_activity_row.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
@@ -185,7 +186,7 @@ class _VehicleHero extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'DriveTracker',
+                                  ProductIdentity.name,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.labelMedium?.copyWith(

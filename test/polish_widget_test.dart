@@ -122,6 +122,7 @@ void main() {
       await _pumpUntilFound(tester, find.text('More'));
 
       expect(find.text('Vehicle'), findsWidgets);
+      expect(find.byKey(const Key('moreMaintenanceSection')), findsOneWidget);
       expect(find.text('Records'), findsOneWidget);
       await _scrollUntilFound(
         tester,
