@@ -212,6 +212,7 @@ class DriveTrackerController extends ChangeNotifier {
   bool _initialized = false;
   bool _disposed = false;
   bool _postStartupNotificationSyncStarted = false;
+  Future<void> _notificationReconciliation = Future<void>.value();
   bool _busy = false;
   String? _errorMessage;
   ThemeMode _themeMode = ThemeMode.system;
@@ -1010,7 +1011,19 @@ class DriveTrackerController extends ChangeNotifier {
     }
   }
 
-  Future<void> _reconcileNotificationsBestEffort() async {
+  Future<void> _reconcileNotificationsBestEffort() {
+    // Startup and user mutations must not cancel/schedule concurrently.
+    return _notificationReconciliation = _notificationReconciliation.then<void>(
+      (_) async {
+        if (_disposed) {
+          return;
+        }
+        await _performNotificationReconciliation();
+      },
+    );
+  }
+
+  Future<void> _performNotificationReconciliation() async {
     try {
       final result = await _notificationScheduler.reconcile(
         enabled: _localReminderNotificationsEnabled,
@@ -1036,6 +1049,9 @@ class DriveTrackerController extends ChangeNotifier {
     _postStartupNotificationSyncStarted = true;
     unawaited(() async {
       await _refreshNotificationStatus();
+      if (_disposed) {
+        return;
+      }
       await _reconcileNotificationsBestEffort();
       if (!_disposed) {
         notifyListeners();

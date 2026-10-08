@@ -7,7 +7,6 @@ import '../features/reminders/presentation/reminders_screen.dart';
 import '../shared/widgets/dt_bottom_sheet.dart';
 import '../shared/widgets/dt_category_icon.dart';
 import 'router/app_navigation.dart';
-import 'theme/dt_motion.dart';
 import 'theme/dt_tokens.dart';
 
 class DriveTrackerShell extends StatefulWidget {
@@ -94,45 +93,17 @@ class _DriveTrackerShellState extends State<DriveTrackerShell> {
   }
 }
 
-class _ActionFab extends StatefulWidget {
+class _ActionFab extends StatelessWidget {
   const _ActionFab({required this.onPressed});
-
   final VoidCallback onPressed;
-
-  @override
-  State<_ActionFab> createState() => _ActionFabState();
-}
-
-class _ActionFabState extends State<_ActionFab> {
-  bool _pressed = false;
-
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = DTMotion.reduceMotionOf(context);
-
-    return GestureDetector(
-      onTapDown: (_) => _setPressed(true),
-      onTapCancel: () => _setPressed(false),
-      onTapUp: (_) => _setPressed(false),
-      child: AnimatedScale(
-        scale: _pressed && !reduceMotion ? 0.94 : 1,
-        duration: DTMotion.durationOf(context, DTDurations.fast),
-        curve: Curves.easeOutCubic,
-        child: FloatingActionButton(
-          key: const Key('mainActionButton'),
-          onPressed: widget.onPressed,
-          tooltip: 'Add entry',
-          child: const Icon(Icons.add_rounded),
-        ),
-      ),
+    return FloatingActionButton(
+      key: const Key('mainActionButton'),
+      onPressed: onPressed,
+      tooltip: 'Add entry',
+      child: const Icon(Icons.add_rounded),
     );
-  }
-
-  void _setPressed(bool pressed) {
-    if (_pressed == pressed || !mounted) {
-      return;
-    }
-    setState(() => _pressed = pressed);
   }
 }
 

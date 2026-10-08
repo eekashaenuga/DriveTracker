@@ -408,44 +408,90 @@ void main() {
   });
 
   group('DriveTrackerController notifications', () {
-    test('startup reconciles stored notification preference after first load', () async {
+    test(
+      'startup reconciles stored notification preference after first load',
+      () async {
+        final services = createTestServices();
+        final vehicle = await _addVehicle(services);
+        final item = await _addDateMaintenanceItem(services, vehicle);
+        await _completeItem(
+          services,
+          vehicle: vehicle,
+          item: item,
+          eventDateTime: DateTime(2025, 10, 1, 12),
+          odometer: 70000,
+          isBaseline: true,
+        );
+        await services.settings.setLocalReminderNotificationsEnabled(true);
+        final permissionStatusBlocker = Completer<void>();
+        final initializeBlocker = Completer<void>();
+        final client = FakeLocalNotificationClient()
+          ..permissionStatusBlocker = permissionStatusBlocker
+          ..initializeBlocker = initializeBlocker;
+        final controller = DriveTrackerController(
+          database: services.database,
+          notificationClient: client,
+          clock: () => DateTime(2026, 9, 1, 8),
+        );
+        addTearDown(controller.dispose);
+
+        await controller.initialize();
+
+        expect(controller.initialized, isTrue);
+        expect(controller.localReminderNotificationsPreferred, isTrue);
+        expect(client.scheduled, isEmpty);
+
+        permissionStatusBlocker.complete();
+        initializeBlocker.complete();
+        await client.firstSchedule.future.timeout(const Duration(seconds: 10));
+        await pumpEventQueue(times: 20);
+
+        expect(controller.localReminderNotificationsEnabled, isTrue);
+        expect(client.scheduled, hasLength(1));
+        expect(client.scheduled.single.stableId, 'maintenance_date_${item.id}');
+      },
+    );
+
+    test('disposed controller stops deferred startup reconciliation', () async {
       final services = createTestServices();
-      final vehicle = await _addVehicle(services);
-      final item = await _addDateMaintenanceItem(services, vehicle);
-      await _completeItem(
-        services,
-        vehicle: vehicle,
-        item: item,
-        eventDateTime: DateTime(2025, 10, 1, 12),
-        odometer: 70000,
-        isBaseline: true,
-      );
-      await services.settings.setLocalReminderNotificationsEnabled(true);
-      final permissionStatusBlocker = Completer<void>();
-      final initializeBlocker = Completer<void>();
+      final blocker = Completer<void>();
       final client = FakeLocalNotificationClient()
-        ..permissionStatusBlocker = permissionStatusBlocker
-        ..initializeBlocker = initializeBlocker;
+        ..permissionStatusBlocker = blocker;
       final controller = DriveTrackerController(
         database: services.database,
         notificationClient: client,
-        clock: () => DateTime(2026, 9, 1, 8),
+      );
+      await controller.initialize();
+      controller.dispose();
+      blocker.complete();
+      await pumpEventQueue(times: 20);
+      expect(client.initializeCount, 0);
+      expect(client.scheduled, isEmpty);
+    });
+
+    test('startup and preference changes reconcile serially', () async {
+      final services = createTestServices();
+      final blocker = Completer<void>();
+      final client = FakeLocalNotificationClient()..initializeBlocker = blocker;
+      final controller = DriveTrackerController(
+        database: services.database,
+        notificationClient: client,
       );
       addTearDown(controller.dispose);
-
       await controller.initialize();
-
-      expect(controller.initialized, isTrue);
-      expect(controller.localReminderNotificationsPreferred, isTrue);
-      expect(client.scheduled, isEmpty);
-
-      permissionStatusBlocker.complete();
-      initializeBlocker.complete();
       await pumpEventQueue(times: 20);
-
-      expect(controller.localReminderNotificationsEnabled, isTrue);
-      expect(client.scheduled, hasLength(1));
-      expect(client.scheduled.single.stableId, 'maintenance_date_${item.id}');
+      expect(client.initializeCount, 1);
+      final change = controller.setLocalReminderNotificationsEnabled(false);
+      await pumpEventQueue(times: 20);
+      expect(client.initializeCount, 1);
+      blocker.complete();
+      await change;
+      await pumpEventQueue(times: 20);
+      expect(client.initializeCount, 2);
+      expect(
+        await services.settings.getLocalReminderNotificationsEnabled(),
+        isFalse,
+      );
     });
 
     test('permission denial does not enable notification preference', () async {
@@ -629,6 +675,7 @@ class FakeLocalNotificationClient implements LocalNotificationClient {
       LocalNotificationPermissionStatus.granted;
   final pending = <int, LocalNotificationRequest?>{};
   final scheduled = <LocalNotificationRequest>[];
+  final firstSchedule = Completer<void>();
   final cancelled = <int>[];
   Completer<void>? initializeBlocker;
   Completer<void>? permissionStatusBlocker;
@@ -663,6 +710,9 @@ class FakeLocalNotificationClient implements LocalNotificationClient {
   Future<void> schedule(LocalNotificationRequest request) async {
     scheduled.add(request);
     pending[request.id] = request;
+    if (!firstSchedule.isCompleted) {
+      firstSchedule.complete();
+    }
   }
 
   @override

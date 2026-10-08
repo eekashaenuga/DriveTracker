@@ -29,8 +29,7 @@ import '../../features/vehicles/domain/vehicle.dart';
 import '../../features/vehicles/presentation/vehicle_details_screen.dart';
 import '../../features/vehicles/presentation/vehicle_form_screen.dart';
 import '../../features/vehicles/presentation/vehicles_screen.dart';
-import '../../shared/widgets/dt_motion.dart';
-import '../theme/dt_tokens.dart';
+import '../theme/dt_motion.dart';
 
 class AppNavigation {
   const AppNavigation._();
@@ -71,10 +70,7 @@ class AppNavigation {
     BuildContext context,
     OdometerEntry entry,
   ) {
-    return _push<void>(
-      context,
-      (_) => OdometerEntryFormScreen(entry: entry),
-    );
+    return _push<void>(context, (_) => OdometerEntryFormScreen(entry: entry));
   }
 
   static Future<void> openRefuel(BuildContext context, {Refuel? refuel}) {
@@ -153,10 +149,7 @@ class AppNavigation {
     BuildContext context,
     MaintenanceItem item,
   ) {
-    return _push<void>(
-      context,
-      (_) => MaintenanceItemFormScreen(item: item),
-    );
+    return _push<void>(context, (_) => MaintenanceItemFormScreen(item: item));
   }
 
   static Future<void> openMaintenanceItemDetails(
@@ -173,10 +166,7 @@ class AppNavigation {
     BuildContext context, {
     HistoryFilter? filter,
   }) {
-    return _push<void>(
-      context,
-      (_) => HistoryScreen(initialFilter: filter),
-    );
+    return _push<void>(context, (_) => HistoryScreen(initialFilter: filter));
   }
 
   static Future<void> openSettings(BuildContext context) {
@@ -200,26 +190,28 @@ class AppNavigation {
   }
 
   static PageRoute<T> _route<T>(WidgetBuilder builder) {
-    return PageRouteBuilder<T>(
-      transitionDuration: DTDurations.normal,
-      reverseTransitionDuration: DTDurations.fast,
-      pageBuilder: (context, animation, secondaryAnimation) => builder(context),
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        if (DTMotion.reduceMotion(context)) {
-          return child;
-        }
-        final fade = animation.drive(CurveTween(curve: DTMotion.standardCurve));
-        final slide = animation.drive(
-          Tween<Offset>(
-            begin: const Offset(0.045, 0),
-            end: Offset.zero,
-          ).chain(CurveTween(curve: DTMotion.standardCurve)),
-        );
-        return FadeTransition(
-          opacity: fade,
-          child: SlideTransition(position: slide, child: child),
-        );
-      },
+    return _DTMaterialPageRoute<T>(builder: builder);
+  }
+}
+
+class _DTMaterialPageRoute<T> extends MaterialPageRoute<T> {
+  _DTMaterialPageRoute({required super.builder});
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (DTMotion.reduceMotionOf(context)) {
+      return child;
+    }
+    return super.buildTransitions(
+      context,
+      animation,
+      secondaryAnimation,
+      child,
     );
   }
 }
