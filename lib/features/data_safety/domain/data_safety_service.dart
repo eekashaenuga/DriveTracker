@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_migrations.dart';
+import '../../../core/product_identity.dart';
 import '../../attachments/domain/attachment_io.dart';
 import 'backup_manifest.dart';
 
@@ -503,7 +504,7 @@ class DataSafetyService {
         ..add(
           ArchiveFile.string(
             'README.txt',
-            'DriveTracker CSV export\n'
+            '${ProductIdentity.csvExportTitle}\n'
                 'Created: ${now.toIso8601String()}\n'
                 'Schema version: $schemaVersion\n',
           ),
@@ -813,7 +814,7 @@ class DataSafetyService {
       );
       if (archive.isEmpty) {
         throw const DataSafetyException(
-          'Backup file is not a valid DriveTracker backup.',
+          'Backup file is not a valid ${ProductIdentity.name} backup.',
         );
       }
       if (duplicateNames.isNotEmpty) {
@@ -838,7 +839,7 @@ class DataSafetyService {
       rethrow;
     } catch (_) {
       throw const DataSafetyException(
-        'Backup file is not a valid DriveTracker backup.',
+        'Backup file is not a valid ${ProductIdentity.name} backup.',
       );
     }
   }
@@ -880,9 +881,7 @@ class DataSafetyService {
         expectedVersion: schemaVersion,
       );
     } on StateError {
-      throw const DataSafetyException(
-        'Backup database schema is incomplete.',
-      );
+      throw const DataSafetyException('Backup database schema is incomplete.');
     }
     final integrityRows = await db.rawQuery('PRAGMA integrity_check');
     final integrity = integrityRows.isEmpty

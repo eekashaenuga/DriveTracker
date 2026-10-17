@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drivetracker/app/app_controller.dart';
 import 'package:drivetracker/core/notifications/local_notification_service.dart';
+import 'package:drivetracker/core/product_identity.dart';
 import 'package:drivetracker/features/attachments/domain/attachment_io.dart';
 import 'package:drivetracker/features/data_safety/domain/data_safety_service.dart';
 import 'package:drivetracker/features/documents/domain/vehicle_document.dart';
@@ -50,7 +51,7 @@ void main() {
           ),
         );
         expect(request.scheduledAt, DateTime(2026, 9, 1, 9));
-        expect(request.title, 'DriveTracker');
+        expect(request.title, ProductIdentity.name);
         expect(request.body, 'Ford Fiesta - MOT due on 1 Oct 2026');
         expect(client.pendingNotificationIds(), completion([request.id]));
       },

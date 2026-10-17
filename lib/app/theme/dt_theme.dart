@@ -1,44 +1,50 @@
 import 'package:flutter/material.dart';
 
+import 'dt_brand_colors.dart';
 import 'dt_tokens.dart';
 
 class DTTheme {
   const DTTheme._();
 
-  static const Color _seed = Color(0xFF0E7C7B);
-  static const Color _lightSurface = Color(0xFFFAFAF7);
-  static const Color _darkSurface = Color(0xFF101412);
-  static const Color _lightSurfaceVariant = Color(0xFFF0F4EF);
-  static const Color _darkSurfaceVariant = Color(0xFF18201D);
+  static ThemeData light() => _themeFromScheme(_scheme(Brightness.light));
 
-  static ThemeData light() {
-    final scheme =
-        ColorScheme.fromSeed(
-          seedColor: _seed,
-          brightness: Brightness.light,
-        ).copyWith(
-          surface: _lightSurface,
-          surfaceContainerHighest: _lightSurfaceVariant,
-          secondary: const Color(0xFF536B5E),
-          tertiary: const Color(0xFFAA6D35),
-        );
+  static ThemeData dark() => _themeFromScheme(_scheme(Brightness.dark));
 
-    return _themeFromScheme(scheme);
-  }
-
-  static ThemeData dark() {
-    final scheme =
-        ColorScheme.fromSeed(
-          seedColor: _seed,
-          brightness: Brightness.dark,
-        ).copyWith(
-          surface: _darkSurface,
-          surfaceContainerHighest: _darkSurfaceVariant,
-          secondary: const Color(0xFF9AB9A9),
-          tertiary: const Color(0xFFE2B17F),
-        );
-
-    return _themeFromScheme(scheme);
+  static ColorScheme _scheme(Brightness brightness) {
+    final base = ColorScheme.fromSeed(
+      seedColor: DTBrandColors.primarySeed,
+      brightness: brightness,
+    );
+    final mint = ColorScheme.fromSeed(
+      seedColor: DTBrandColors.mintSeed,
+      brightness: brightness,
+    );
+    final warning = ColorScheme.fromSeed(
+      seedColor: DTBrandColors.warningSeed,
+      brightness: brightness,
+    );
+    // Keep foregrounds and containers paired with their tonal palettes.
+    return base.copyWith(
+      surface: brightness == Brightness.light
+          ? DTBrandColors.lightSurface
+          : DTBrandColors.darkSurface,
+      secondary: mint.primary,
+      onSecondary: mint.onPrimary,
+      secondaryContainer: mint.primaryContainer,
+      onSecondaryContainer: mint.onPrimaryContainer,
+      secondaryFixed: mint.primaryFixed,
+      secondaryFixedDim: mint.primaryFixedDim,
+      onSecondaryFixed: mint.onPrimaryFixed,
+      onSecondaryFixedVariant: mint.onPrimaryFixedVariant,
+      tertiary: warning.primary,
+      onTertiary: warning.onPrimary,
+      tertiaryContainer: warning.primaryContainer,
+      onTertiaryContainer: warning.onPrimaryContainer,
+      tertiaryFixed: warning.primaryFixed,
+      tertiaryFixedDim: warning.primaryFixedDim,
+      onTertiaryFixed: warning.onPrimaryFixed,
+      onTertiaryFixedVariant: warning.onPrimaryFixedVariant,
+    );
   }
 
   static ThemeData _themeFromScheme(ColorScheme scheme) {

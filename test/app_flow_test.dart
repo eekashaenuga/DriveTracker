@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:drivetracker/app/app.dart';
+import 'package:drivetracker/core/product_identity.dart';
 import 'package:drivetracker/app/app_controller.dart';
 import 'package:drivetracker/app/theme/dt_theme.dart';
 import 'package:drivetracker/features/attachments/domain/attachment.dart';
@@ -35,7 +36,8 @@ void main() {
       find.byKey(const Key('addFirstVehicleButton')),
     );
 
-    expect(find.text('DriveTracker'), findsOneWidget);
+    expect(find.text(ProductIdentity.name), findsOneWidget);
+    expect(find.text(ProductIdentity.tagline), findsOneWidget);
     expect(find.byKey(const Key('addFirstVehicleButton')), findsOneWidget);
   });
 

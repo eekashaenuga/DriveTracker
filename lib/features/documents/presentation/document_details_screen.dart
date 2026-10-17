@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../app/app_controller.dart';
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/product_identity.dart';
 import '../../../shared/widgets/dt_date_field.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
 import '../../attachments/domain/attachment.dart';
@@ -172,7 +173,7 @@ class _DocumentDetailsScreenState extends State<DocumentDetailsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete document permanently?'),
         content: Text(
-          'This removes ${document.title} and its managed attachment files from DriveTracker.',
+          'This removes ${document.title} and its managed attachment files from ${ProductIdentity.name}.',
         ),
         actions: [
           TextButton(

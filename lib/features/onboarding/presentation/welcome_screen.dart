@@ -54,7 +54,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.route_rounded, size: 48, color: theme.colorScheme.primary),
+        Image.asset(
+          'assets/branding/flutter/vehnora_mark.png',
+          width: 64,
+          height: 64,
+          excludeFromSemantics: true,
+        ),
         const SizedBox(height: DTSpacing.xl),
         Text(
           ProductIdentity.name,
@@ -64,7 +69,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         ),
         const SizedBox(height: DTSpacing.md),
         Text(
-          'Everything about your vehicle,\nin one place.',
+          ProductIdentity.tagline,
           style: theme.textTheme.headlineSmall?.copyWith(
             height: 1.15,
             fontWeight: FontWeight.w700,

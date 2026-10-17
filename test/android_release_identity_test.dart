@@ -6,9 +6,8 @@ void main() {
   test('Android release metadata preserves the v1.0.0 upgrade path', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
-    final manifest = File(
-      'android/app/src/main/AndroidManifest.xml',
-    ).readAsStringSync();
+    final manifest = File('android/app/src/main/AndroidManifest.xml')
+        .readAsStringSync();
 
     expect(
       pubspec,
@@ -19,6 +18,12 @@ void main() {
       contains('val publishedApplicationId = "com.eekashaenuga.drivetracker"'),
     );
     expect(gradle, contains('applicationId = publishedApplicationId'));
+    expect(gradle, contains('namespace = "com.eekashaenuga.drivetracker"'));
+    expect(manifest, contains('android:label="@string/app_name"'));
+    expect(
+      File('android/app/src/main/res/values/strings.xml').readAsStringSync(),
+      contains('<string name="app_name">Vehnora</string>'),
+    );
     expect(gradle, contains('val v1_0_0VersionCode = 1'));
     expect(gradle, contains('versionCode = flutter.versionCode'));
     expect(gradle, contains('flutter.versionCode <= v1_0_0VersionCode'));

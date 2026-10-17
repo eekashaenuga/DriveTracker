@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/product_identity.dart';
 import '../../../core/utilities/formatters.dart';
 import '../../../core/utilities/money.dart';
 import '../../../core/utilities/scaled_decimal.dart';
@@ -265,7 +266,8 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
               DTFormSection(
                 title: 'Fuel details',
                 icon: Icons.local_gas_station_rounded,
-                subtitle: 'Enter any two values and DriveTracker calculates the third.',
+                subtitle:
+                    'Enter any two values and ${ProductIdentity.name} calculates the third.',
                 children: [
                   TextFormField(
                     key: const Key('refuelTotalCostField'),

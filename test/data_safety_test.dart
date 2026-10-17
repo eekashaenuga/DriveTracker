@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:drivetracker/app/app.dart';
 import 'package:drivetracker/app/app_controller.dart';
+import 'package:drivetracker/core/product_identity.dart';
 import 'package:drivetracker/app/theme/dt_theme.dart';
 import 'package:drivetracker/core/database/database_migrations.dart';
 import 'package:drivetracker/core/notifications/local_notification_service.dart';
@@ -471,6 +472,10 @@ void main() {
       );
 
       expect(archive.find('README.txt'), isNotNull);
+      expect(
+        utf8.decode(archive.find('README.txt')!.readBytes()!),
+        contains(ProductIdentity.csvExportTitle),
+      );
       expect(vehiclesCsv, contains('Commuter'));
       expect(attachmentsCsv, contains('policy.pdf'));
     });
@@ -628,7 +633,7 @@ void main() {
       );
       await _pumpUntilFound(
         tester,
-        find.text('Backup file is not a valid DriveTracker backup.'),
+        find.text('Backup file is not a valid ${ProductIdentity.name} backup.'),
       );
 
       expect(find.byKey(const Key('addFirstVehicleButton')), findsOneWidget);
@@ -1316,7 +1321,9 @@ Future<void> _writeIncompleteSchemaBackup(
     )) {
       await db.execute('CREATE TABLE $table (id TEXT)');
     }
-    await db.execute('PRAGMA user_version = ${DatabaseMigrations.schemaVersion}');
+    await db.execute(
+      'PRAGMA user_version = ${DatabaseMigrations.schemaVersion}',
+    );
   } finally {
     await db.close();
   }
