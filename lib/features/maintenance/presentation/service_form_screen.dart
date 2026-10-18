@@ -188,6 +188,7 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
                 subtitle: 'Vehicle, date, mileage and garage for this service.',
                 children: [
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     key: const Key('serviceVehicleField'),
                     initialValue: selectedVehicle?.id,
                     decoration: const InputDecoration(labelText: 'Vehicle'),
@@ -195,7 +196,11 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
                       for (final vehicle in vehicles)
                         DropdownMenuItem(
                           value: vehicle.id,
-                          child: Text(vehicle.name),
+                          child: Text(
+                            vehicle.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                     ],
                     validator: (value) =>

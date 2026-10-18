@@ -242,7 +242,7 @@ class _DocumentCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: DTSpacing.sm),
       child: Material(
         key: Key('documentCard_${document.id}'),
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.42),
+        color: colors.surfaceContainerLow,
         borderRadius: DTRadii.cardRadius,
         child: InkWell(
           borderRadius: DTRadii.cardRadius,
@@ -287,7 +287,7 @@ class _DocumentCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: DTSpacing.xs),
@@ -407,7 +407,7 @@ class _StatusChip extends StatelessWidget {
             label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
               color: chipColors.foreground,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

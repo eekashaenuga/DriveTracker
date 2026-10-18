@@ -129,6 +129,7 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
             padding: const EdgeInsets.all(DTSpacing.lg),
             children: [
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 key: const Key('maintenanceVehicleField'),
                 initialValue: selectedVehicle?.id,
                 decoration: const InputDecoration(labelText: 'Vehicle'),
@@ -136,7 +137,11 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
                   for (final vehicle in vehicles)
                     DropdownMenuItem(
                       value: vehicle.id,
-                      child: Text(vehicle.name),
+                      child: Text(
+                        vehicle.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
                 validator: (value) =>

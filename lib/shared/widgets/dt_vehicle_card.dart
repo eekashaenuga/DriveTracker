@@ -27,8 +27,8 @@ class DTVehicleCard extends StatelessWidget {
 
     return Material(
       color: isSelected
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.55)
-          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
+          ? theme.colorScheme.secondaryContainer
+          : theme.colorScheme.surfaceContainerLow,
       borderRadius: DTRadii.cardRadius,
       child: InkWell(
         onTap: onTap,
@@ -56,7 +56,7 @@ class DTVehicleCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),

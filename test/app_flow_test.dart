@@ -2735,7 +2735,11 @@ Future<void> _pumpUntilFound(
     if (finder.evaluate().isNotEmpty) {
       return;
     }
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    // Database and controller refreshes use real asynchronous I/O; give them
+    // wall-clock time as well as advancing the test's fake animation clock.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
     if (finder.evaluate().isNotEmpty) {
       return;
     }

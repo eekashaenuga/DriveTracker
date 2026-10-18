@@ -23,7 +23,7 @@ class MoreScreen extends StatelessWidget {
             Text(
               'More',
               style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.w900),
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: DTSpacing.xs),
             Text(

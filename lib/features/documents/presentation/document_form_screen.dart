@@ -111,6 +111,7 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
             padding: const EdgeInsets.all(DTSpacing.lg),
             children: [
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 key: const Key('documentVehicleField'),
                 initialValue: selectedVehicle?.id,
                 decoration: const InputDecoration(labelText: 'Vehicle'),
@@ -118,7 +119,11 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
                   for (final vehicle in vehicles)
                     DropdownMenuItem(
                       value: vehicle.id,
-                      child: Text(vehicle.name),
+                      child: Text(
+                        vehicle.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
                 validator: (value) =>

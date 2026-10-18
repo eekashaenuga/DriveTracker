@@ -15,6 +15,54 @@ import 'helpers/test_services.dart';
 
 void main() {
   testWidgets(
+    'Material navigation and Home support large text in both themes',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 760));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(() {
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+        tester.binding.setSurfaceSize(null);
+      });
+      final services = createTestServices();
+      await tester.runAsync(() async {
+        await services.vehicleService.addVehicle(
+          _vehicleDraft(
+            'Long family vehicle name with business and weekend use',
+          ),
+        );
+      });
+      final controller = await _pumpApp(
+        tester,
+        services,
+        find.byKey(const Key('homeDashboardList')),
+        themeMode: ThemeMode.light,
+      );
+      for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+        await tester.runAsync(() => controller.setThemeMode(mode));
+        await tester.pumpAndSettle();
+        expect(find.byType(NavigationBar), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await _tapAndPump(tester, find.byKey(const Key('mainActionButton')));
+        await _pumpUntilFound(
+          tester,
+          find.byKey(const Key('actionRefuelTile')),
+        );
+        final refuel = tester.getTopLeft(
+          find.byKey(const Key('actionRefuelTile')),
+        );
+        final service = tester.getTopLeft(
+          find.byKey(const Key('actionServiceTile')),
+        );
+        expect(service.dy, greaterThan(refuel.dy));
+        expect(tester.takeException(), isNull);
+        Navigator.of(tester.element(find.byKey(const Key('actionRefuelTile'))))
+            .pop();
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+
+  testWidgets(
     'Home polish tolerates narrow dark layout and long vehicle names',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(320, 760));

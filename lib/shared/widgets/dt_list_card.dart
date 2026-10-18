@@ -39,7 +39,7 @@ class DTListCard extends StatelessWidget {
       child: Material(
         color: selected
             ? accentColor.withValues(alpha: 0.16)
-            : colors.surfaceContainerHighest.withValues(alpha: 0.42),
+            : colors.surfaceContainerLow,
         borderRadius: DTRadii.cardRadius,
         child: InkWell(
           borderRadius: DTRadii.cardRadius,
@@ -64,7 +64,7 @@ class DTListCard extends StatelessWidget {
                           color: enabled
                               ? colors.onSurface
                               : colors.onSurface.withValues(alpha: 0.55),
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: DTSpacing.xs),

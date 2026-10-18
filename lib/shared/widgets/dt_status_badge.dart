@@ -31,7 +31,6 @@ class DTStatusBadge extends StatelessWidget {
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.13),
             borderRadius: BorderRadius.circular(DTRadii.card),
-            border: Border.all(color: color.withValues(alpha: 0.34)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -43,11 +42,11 @@ class DTStatusBadge extends StatelessWidget {
               Flexible(
                 child: Text(
                   label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: color,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),

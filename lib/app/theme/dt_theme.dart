@@ -61,13 +61,13 @@ class DTTheme {
       visualDensity: VisualDensity.standard,
       appBarTheme: AppBarTheme(
         elevation: 0,
-        scrolledUnderElevation: 0,
+        scrolledUnderElevation: 1,
         centerTitle: false,
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
         titleTextStyle: textTheme.titleLarge?.copyWith(
           color: scheme.onSurface,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
         ),
         iconTheme: IconThemeData(color: scheme.onSurfaceVariant),
         actionsIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
@@ -76,7 +76,7 @@ class DTTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(borderRadius: DTRadii.cardRadius),
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.52),
+        color: scheme.surfaceContainerLow,
       ),
       listTileTheme: ListTileThemeData(
         minTileHeight: 64,
@@ -86,17 +86,17 @@ class DTTheme {
           horizontal: DTSpacing.md,
           vertical: DTSpacing.xs,
         ),
-        titleTextStyle: textTheme.titleSmall?.copyWith(
+        titleTextStyle: textTheme.bodyLarge?.copyWith(
           color: scheme.onSurface,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w500,
         ),
-        subtitleTextStyle: textTheme.bodySmall?.copyWith(
+        subtitleTextStyle: textTheme.bodyMedium?.copyWith(
           color: scheme.onSurfaceVariant,
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.46),
+        fillColor: scheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: DTRadii.controlRadius,
           borderSide: BorderSide.none,
@@ -121,10 +121,12 @@ class DTTheme {
           horizontal: DTSpacing.lg,
           vertical: DTSpacing.md,
         ),
+        helperMaxLines: 3,
+        errorMaxLines: 3,
         labelStyle: TextStyle(color: scheme.onSurfaceVariant),
         floatingLabelStyle: TextStyle(
           color: scheme.primary,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
         ),
         prefixIconColor: scheme.onSurfaceVariant,
         suffixIconColor: scheme.onSurfaceVariant,
@@ -132,8 +134,8 @@ class DTTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(borderRadius: DTRadii.controlRadius),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          shape: const StadiumBorder(),
+          textStyle: const TextStyle(fontWeight: FontWeight.w500),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
@@ -142,25 +144,25 @@ class DTTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(DTRadii.hero),
         ),
-        backgroundColor: scheme.primary,
-        foregroundColor: scheme.onPrimary,
+        backgroundColor: scheme.primaryContainer,
+        foregroundColor: scheme.onPrimaryContainer,
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(borderRadius: DTRadii.controlRadius),
+          shape: const StadiumBorder(),
           side: BorderSide(color: scheme.outlineVariant),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: DTRadii.controlRadius),
-          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+          shape: const StadiumBorder(),
+          textStyle: const TextStyle(fontWeight: FontWeight.w500),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-          minimumSize: const Size.square(44),
+          minimumSize: const Size.square(48),
           shape: RoundedRectangleBorder(borderRadius: DTRadii.controlRadius),
         ),
       ),
@@ -170,7 +172,7 @@ class DTTheme {
         selectedColor: scheme.primaryContainer.withValues(alpha: 0.72),
         labelStyle: textTheme.labelLarge?.copyWith(
           color: scheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
         ),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
@@ -179,7 +181,7 @@ class DTTheme {
             RoundedRectangleBorder(borderRadius: DTRadii.controlRadius),
           ),
           textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontWeight: FontWeight.w700),
+            TextStyle(fontWeight: FontWeight.w500),
           ),
         ),
       ),
@@ -192,7 +194,7 @@ class DTTheme {
         }),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: scheme.surface,
+        backgroundColor: scheme.surfaceContainerLow,
         showDragHandle: true,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
@@ -201,11 +203,11 @@ class DTTheme {
         ),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: scheme.surface,
+        backgroundColor: scheme.surfaceContainerHigh,
         shape: RoundedRectangleBorder(borderRadius: DTRadii.heroRadius),
         titleTextStyle: textTheme.titleLarge?.copyWith(
           color: scheme.onSurface,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w500,
         ),
         contentTextStyle: textTheme.bodyMedium?.copyWith(
           color: scheme.onSurfaceVariant,
@@ -213,14 +215,14 @@ class DTTheme {
       ),
       popupMenuTheme: PopupMenuThemeData(
         shape: RoundedRectangleBorder(borderRadius: DTRadii.controlRadius),
-        color: scheme.surface,
+        color: scheme.surfaceContainer,
       ),
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant.withValues(alpha: 0.55),
         space: DTSpacing.lg,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surface,
+        backgroundColor: scheme.surfaceContainer,
         indicatorColor: scheme.primaryContainer,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(

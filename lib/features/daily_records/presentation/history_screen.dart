@@ -81,7 +81,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Text(
               'History',
               style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.w900),
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: DTSpacing.xs),
             Text(
@@ -573,7 +573,7 @@ class _ActivityList extends StatelessWidget {
             child: Text(
               month,
               style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
+                  ?.copyWith(fontWeight: FontWeight.w500),
             ),
           ),
         );
@@ -611,7 +611,7 @@ class _ActivityList extends StatelessWidget {
     return Text(
       DTFormatters.moneyMinor(amount),
       style: Theme.of(context).textTheme.labelLarge
-          ?.copyWith(color: color, fontWeight: FontWeight.w800),
+          ?.copyWith(color: color, fontWeight: FontWeight.w500),
     );
   }
 
@@ -687,7 +687,7 @@ class _OdometerActivityDialog extends StatelessWidget {
           Text(
             DTFormatters.odometer(activity.odometer, unit),
             style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w900),
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: DTSpacing.sm),
           Text(DTFormatters.dateTime(activity.eventDateTime)),

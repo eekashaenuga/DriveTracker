@@ -140,6 +140,7 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
             padding: const EdgeInsets.all(DTSpacing.lg),
             children: [
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 key: const Key('incomeVehicleField'),
                 initialValue: selectedVehicle?.id,
                 decoration: const InputDecoration(labelText: 'Vehicle'),
@@ -147,7 +148,11 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
                   for (final vehicle in vehicles)
                     DropdownMenuItem(
                       value: vehicle.id,
-                      child: Text(vehicle.name),
+                      child: Text(
+                        vehicle.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
                 validator: (value) =>
@@ -186,6 +191,7 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
                         child: SizedBox(
                           key: const Key('incomeCategoryField'),
                           child: DropdownButtonFormField<String>(
+                            isExpanded: true,
                             key: ValueKey<String>(
                               'income-category-${_categoryId ?? 'none'}-${categories.length}',
                             ),

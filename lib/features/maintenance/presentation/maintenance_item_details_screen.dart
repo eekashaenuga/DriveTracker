@@ -73,7 +73,7 @@ class _MaintenanceItemDetailsScreenState
                 Text(
                   data.reminder.state.label,
                   style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w900),
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: DTSpacing.sm),
                 Text(_summary(data.reminder, data.vehicle)),
@@ -316,7 +316,7 @@ class _InfoRow extends StatelessWidget {
       trailing: Text(
         value,
         style: Theme.of(context).textTheme.labelLarge
-            ?.copyWith(fontWeight: FontWeight.w800),
+            ?.copyWith(fontWeight: FontWeight.w500),
       ),
     );
   }

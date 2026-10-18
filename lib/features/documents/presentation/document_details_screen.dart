@@ -250,7 +250,7 @@ class _DocumentHeader extends StatelessWidget {
                         document.category,
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: colors.onSurfaceVariant,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       Text(
@@ -258,7 +258,7 @@ class _DocumentHeader extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -344,24 +344,40 @@ class _DetailRow extends StatelessWidget {
     }
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final labelWidget = Text(
+      label,
+      style: theme.textTheme.labelLarge?.copyWith(
+        color: colors.onSurfaceVariant,
+      ),
+    );
+    final valueWidget = SelectableText(
+      valueText,
+      style: theme.textTheme.bodyLarge,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: DTSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 116,
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: DTSpacing.md),
-          Expanded(child: Text(valueText)),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 340 ||
+              MediaQuery.textScalerOf(context).scale(14) > 20) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                labelWidget,
+                const SizedBox(height: DTSpacing.xs),
+                valueWidget,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 116, child: labelWidget),
+              const SizedBox(width: DTSpacing.md),
+              Expanded(child: valueWidget),
+            ],
+          );
+        },
       ),
     );
   }

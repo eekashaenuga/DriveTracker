@@ -181,6 +181,7 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
                 subtitle: 'Vehicle, date and mileage for this refuel.',
                 children: [
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     key: const Key('refuelVehicleField'),
                     initialValue: selectedVehicle?.id,
                     decoration: const InputDecoration(labelText: 'Vehicle'),
@@ -188,7 +189,11 @@ class _RefuelFormScreenState extends State<RefuelFormScreen> {
                       for (final vehicle in vehicles)
                         DropdownMenuItem(
                           value: vehicle.id,
-                          child: Text(vehicle.name),
+                          child: Text(
+                            vehicle.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                     ],
                     validator: (value) =>

@@ -119,6 +119,9 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
               if (_isEditing) ...[
                 IconButton.filledTonal(
                   tooltip: 'Delete expense',
+                  style: IconButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                  ),
                   onPressed: controller.isBusy ? null : _delete,
                   icon: const Icon(Icons.delete_outline_rounded),
                 ),
@@ -144,6 +147,7 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
             padding: const EdgeInsets.all(DTSpacing.lg),
             children: [
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 key: const Key('expenseVehicleField'),
                 initialValue: selectedVehicle?.id,
                 decoration: const InputDecoration(labelText: 'Vehicle'),
@@ -151,7 +155,11 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
                   for (final vehicle in vehicles)
                     DropdownMenuItem(
                       value: vehicle.id,
-                      child: Text(vehicle.name),
+                      child: Text(
+                        vehicle.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
                 validator: (value) =>
@@ -190,6 +198,7 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
                         child: SizedBox(
                           key: const Key('expenseCategoryField'),
                           child: DropdownButtonFormField<String>(
+                            isExpanded: true,
                             key: ValueKey<String>(
                               'expense-category-${_categoryId ?? 'none'}-${categories.length}',
                             ),

@@ -59,7 +59,7 @@ class VehicleDetailsScreen extends StatelessWidget {
                 Text(
                   vehicle.description,
                   style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w900),
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: DTSpacing.xs),
                 Text(
@@ -95,7 +95,7 @@ class VehicleDetailsScreen extends StatelessWidget {
                           vehicle.distanceUnit,
                         ),
                         style: Theme.of(context).textTheme.labelLarge
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                            ?.copyWith(fontWeight: FontWeight.w500),
                       ),
                     ),
                 if (vehicle.isArchived) ...[

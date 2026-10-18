@@ -27,7 +27,7 @@ class DTMetricCard extends StatelessWidget {
     final accent = accentColor ?? colors.primary;
 
     return Material(
-      color: colors.surfaceContainerHighest.withValues(alpha: 0.44),
+      color: colors.surfaceContainerLow,
       borderRadius: DTRadii.cardRadius,
       child: InkWell(
         onTap: onTap,
@@ -46,11 +46,9 @@ class DTMetricCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: colors.onSurfaceVariant,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -63,24 +61,17 @@ class DTMetricCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: DTSpacing.md),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
+              Text(
+                value,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0,
                 ),
               ),
               if (supportingText != null) ...[
                 const SizedBox(height: DTSpacing.xs),
                 Text(
                   supportingText!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
