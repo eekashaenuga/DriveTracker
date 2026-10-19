@@ -142,6 +142,7 @@ class TestServices {
       serviceRecordRepository: serviceRecords,
     );
     homeRepository = HomeRepository(
+      documentRepository: documents,
       vehicleRepository: vehicles,
       odometerRepository: odometers,
       refuelRepository: refuels,

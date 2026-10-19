@@ -87,6 +87,7 @@ class DriveTrackerController extends ChangeNotifier {
       serviceRecordRepository: _serviceRecordRepository,
     );
     _homeRepository = HomeRepository(
+      documentRepository: _documentRepository,
       vehicleRepository: _vehicleRepository,
       odometerRepository: _odometerRepository,
       refuelRepository: _refuelRepository,
@@ -278,6 +279,11 @@ class DriveTrackerController extends ChangeNotifier {
   List<DailyActivity> get recentActivity {
     return List.unmodifiable(_dashboard?.recentActivity ?? const []);
   }
+
+  bool get showDocumentAttention => _dashboard?.showDocumentAttention ?? false;
+
+  DocumentExpiryReminder? get nextDocumentAttention =>
+      _dashboard?.nextDocumentAttention;
 
   MaintenanceReminder? get nextMaintenanceAttention {
     return _dashboard?.nextMaintenanceAttention;
@@ -726,7 +732,8 @@ class DriveTrackerController extends ChangeNotifier {
   }) async {
     return _runMutation(() async {
       final item = await _maintenanceItemService.createMaintenanceItem(draft);
-      if (baselineDateTime != null || baselineOdometer != null) {
+      if (!item.isExpiry &&
+          (baselineDateTime != null || baselineOdometer != null)) {
         await _serviceRecordService.createBaselineCompletion(
           item: item,
           eventDateTime: baselineDateTime ?? _clock(),
@@ -1059,6 +1066,9 @@ class DriveTrackerController extends ChangeNotifier {
     }());
   }
 
+  int _dataRevision = 0;
+  int get dataRevision => _dataRevision;
+
   Future<void> _reloadData({String? preferredVehicleId}) async {
     _activeVehicles = await _vehicleRepository.listActive();
     _archivedVehicles = await _vehicleRepository.listArchived();
@@ -1072,6 +1082,7 @@ class DriveTrackerController extends ChangeNotifier {
     if (selected == null) {
       await _settingsRepository.setSelectedVehicleId(null);
       _dashboard = null;
+      _dataRevision += 1;
       return;
     }
 
@@ -1082,6 +1093,7 @@ class DriveTrackerController extends ChangeNotifier {
       selected.id,
       now: _clock(),
     );
+    _dataRevision += 1;
   }
 
   Vehicle? _findActiveVehicle(String? vehicleId) {

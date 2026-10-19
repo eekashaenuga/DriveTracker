@@ -226,6 +226,11 @@ class ServiceRecordService {
           'Select a valid maintenance item for this vehicle.',
         ]);
       }
+      if (maintenanceItem.isExpiry) {
+        throw const ValidationException([
+          'Renew the expiry date instead of recording a service for this reminder.',
+        ]);
+      }
       if (cleanName.isEmpty) {
         cleanName = maintenanceItem.name;
       }

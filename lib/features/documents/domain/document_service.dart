@@ -1,3 +1,5 @@
+import '../../reminders/domain/date_reminder_schedule.dart';
+
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../../../core/database/app_database.dart';
@@ -45,6 +47,11 @@ class DocumentService {
       referenceNumber: _cleanOptional(clean.referenceNumber),
       provider: _cleanOptional(clean.provider),
       notes: _cleanOptional(clean.notes),
+      reminderSchedule:
+          clean.reminderSchedule ??
+          (clean.category.toUpperCase() == 'MOT'
+              ? DateReminderSchedule.mot
+              : null),
       isArchived: false,
       createdAt: now,
       updatedAt: now,
@@ -78,6 +85,7 @@ class DocumentService {
       referenceNumber: _cleanOptional(clean.referenceNumber),
       provider: _cleanOptional(clean.provider),
       notes: _cleanOptional(clean.notes),
+      reminderSchedule: clean.reminderSchedule ?? existing.reminderSchedule,
       reminderId: existing.reminderId,
       isArchived: existing.isArchived,
       archivedAt: existing.archivedAt,
@@ -130,6 +138,11 @@ class DocumentService {
       referenceNumber: _cleanOptional(clean.referenceNumber),
       provider: _cleanOptional(clean.provider),
       notes: _cleanOptional(clean.notes),
+      reminderSchedule:
+          clean.reminderSchedule ??
+          (clean.category.toUpperCase() == 'MOT'
+              ? DateReminderSchedule.mot
+              : null),
       isArchived: false,
       createdAt: now,
       updatedAt: now,
@@ -206,6 +219,7 @@ class DocumentService {
     final category = draft.category.trim();
     final title = draft.title.trim();
     final errors = <String>[
+      if (draft.reminderSchedule?.isValid == false) 'Invalid reminder timing.',
       if (category.isEmpty) 'Category is required.',
       if (title.isEmpty) 'Title is required.',
     ];
@@ -228,6 +242,7 @@ class DocumentService {
       referenceNumber: draft.referenceNumber,
       provider: draft.provider,
       notes: draft.notes,
+      reminderSchedule: draft.reminderSchedule,
     );
   }
 

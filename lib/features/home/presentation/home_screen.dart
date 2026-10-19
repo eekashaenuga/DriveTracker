@@ -8,6 +8,7 @@ import '../../../core/product_identity.dart';
 import '../../../core/utilities/formatters.dart';
 import '../../../shared/widgets/dt_activity_row.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
+import '../../../shared/widgets/dt_list_card.dart';
 import '../../../shared/widgets/dt_metric_card.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
 import '../../../shared/widgets/dt_section_header.dart';
@@ -93,10 +94,26 @@ class _HomeDashboardContent extends StatelessWidget {
         ),
         const SizedBox(height: DTSpacing.sm),
         const DTSectionHeader(title: 'Maintenance'),
-        _MaintenanceAttentionTile(
-          reminder: controller.nextMaintenanceAttention,
-          vehicle: vehicle,
-        ),
+        if (controller.showDocumentAttention)
+          DTListCard(
+            icon: Icons.event_outlined,
+            title: controller.nextDocumentAttention!.title,
+            subtitle:
+                '${controller.nextDocumentAttention!.state.label} · Expires ${DTFormatters.date(controller.nextDocumentAttention!.document.expiryDate!)}',
+            accentColor: _maintenanceColor(
+              context,
+              controller.nextDocumentAttention!.state,
+            ),
+            onTap: () => AppNavigation.openDocumentDetails(
+              context,
+              controller.nextDocumentAttention!.document.id,
+            ),
+          )
+        else
+          _MaintenanceAttentionTile(
+            reminder: controller.nextMaintenanceAttention,
+            vehicle: vehicle,
+          ),
         const SizedBox(height: DTSpacing.sm),
         const DTSectionHeader(title: 'Spending trend'),
         _SpendingTrendPanel(trend: controller.spendingTrend),
@@ -1018,6 +1035,7 @@ IconData _maintenanceIcon(MaintenanceReminderState state) {
     MaintenanceReminderState.due => Icons.notification_important_outlined,
     MaintenanceReminderState.dueSoon => Icons.schedule_rounded,
     MaintenanceReminderState.upcoming => Icons.upcoming_rounded,
+    MaintenanceReminderState.setupNeeded => Icons.tune_rounded,
     MaintenanceReminderState.normal => Icons.check_circle_outline_rounded,
   };
 }
@@ -1029,6 +1047,7 @@ Color _maintenanceColor(BuildContext context, MaintenanceReminderState state) {
     MaintenanceReminderState.due => colors.error,
     MaintenanceReminderState.dueSoon => colors.tertiary,
     MaintenanceReminderState.upcoming => colors.primary,
+    MaintenanceReminderState.setupNeeded => colors.onSurfaceVariant,
     MaintenanceReminderState.normal => colors.onSurfaceVariant,
   };
 }

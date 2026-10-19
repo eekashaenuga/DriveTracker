@@ -12,6 +12,8 @@ import '../../vehicles/domain/vehicle.dart';
 import '../domain/maintenance_item.dart';
 import '../domain/maintenance_reminder.dart';
 import '../domain/service_record.dart';
+import '../../reminders/domain/reminder_wording.dart';
+import '../../reminders/domain/date_reminder_schedule.dart';
 
 class MaintenanceItemDetailsScreen extends StatefulWidget {
   const MaintenanceItemDetailsScreen({required this.itemId, super.key});
@@ -78,20 +80,34 @@ class _MaintenanceItemDetailsScreenState
                 const SizedBox(height: DTSpacing.sm),
                 Text(_summary(data.reminder, data.vehicle)),
                 const SizedBox(height: DTSpacing.lg),
-                DTPrimaryButton(
-                  key: const Key('maintenanceDetailRecordServiceButton'),
-                  label: 'Record service',
-                  icon: Icons.build_circle_outlined,
-                  onPressed: () async {
-                    await AppNavigation.openService(
-                      context,
-                      preselectedMaintenanceItemId: data.item.id,
-                    );
-                    if (mounted) {
-                      _refresh();
-                    }
-                  },
-                ),
+                if (data.item.isExpiry)
+                  FilledButton.icon(
+                    key: const Key('renewExpiryButton'),
+                    onPressed: () async {
+                      await AppNavigation.openEditMaintenanceItem(
+                        context,
+                        data.item,
+                      );
+                      if (mounted) _refresh();
+                    },
+                    icon: const Icon(Icons.event_repeat),
+                    label: const Text('Update / renew expiry'),
+                  )
+                else
+                  DTPrimaryButton(
+                    key: const Key('maintenanceDetailRecordServiceButton'),
+                    label: 'Record service',
+                    icon: Icons.build_circle_outlined,
+                    onPressed: () async {
+                      await AppNavigation.openService(
+                        context,
+                        preselectedMaintenanceItemId: data.item.id,
+                      );
+                      if (mounted) {
+                        _refresh();
+                      }
+                    },
+                  ),
                 const SizedBox(height: DTSpacing.md),
                 OutlinedButton.icon(
                   key: const Key('editMaintenanceItemButton'),
@@ -114,60 +130,90 @@ class _MaintenanceItemDetailsScreenState
                   icon: const Icon(Icons.archive_outlined),
                   label: const Text('Archive item'),
                 ),
+                if (data.reminder.nextDateDue != null) ...[
+                  const DTSectionHeader(title: 'Guidance'),
+                  Text(
+                    ReminderWording.message(
+                      vehicle: data.vehicle.name,
+                      name: data.item.name,
+                      due: data.reminder.nextDateDue!,
+                      asOf: context.read<DriveTrackerController>().currentTime,
+                      expiry: data.item.isExpiry,
+                      mot: data.item.isMot,
+                    ).body,
+                  ),
+                ],
                 const DTSectionHeader(title: 'Definition'),
                 _DefinitionRows(item: data.item, vehicle: data.vehicle),
-                const DTSectionHeader(title: 'History'),
-                if (data.history.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: DTSpacing.lg),
-                    child: Text('No services have completed this item yet.'),
-                  )
-                else
-                  for (final completion in data.history)
-                    ListTile(
-                      key: Key('maintenanceHistory_${completion.serviceId}'),
-                      leading: Icon(
-                        completion.isBaseline
-                            ? Icons.flag_outlined
-                            : Icons.build_circle_outlined,
-                      ),
-                      title: Text(
-                        completion.isBaseline
-                            ? 'Baseline completion'
-                            : completion.itemName,
-                      ),
-                      subtitle: Text(
-                        _historySubtitle(completion, data.vehicle),
-                      ),
-                      trailing: completion.isBaseline
-                          ? null
-                          : Text(
-                              DTFormatters.moneyMinor(
-                                completion.totalCostMinor,
-                              ),
-                            ),
-                      onTap: () async {
-                        final controller = context
-                            .read<DriveTrackerController>();
-                        final service = await controller.serviceRecordById(
-                          completion.serviceId,
-                        );
-                        if (service == null) {
-                          return;
-                        }
-                        if (!context.mounted) {
-                          return;
-                        }
-                        await AppNavigation.openService(
-                          context,
-                          service: service,
-                        );
-                        if (!context.mounted) {
-                          return;
-                        }
-                        _refresh();
-                      },
+                if (data.reminder.latestCompletionDate != null)
+                  _InfoRow(
+                    label: 'Last completed',
+                    value: DTFormatters.date(
+                      data.reminder.latestCompletionDate!,
                     ),
+                  ),
+                if (data.reminder.latestCompletionOdometer != null)
+                  _InfoRow(
+                    label: 'Last completed odometer',
+                    value: DTFormatters.odometer(
+                      data.reminder.latestCompletionOdometer,
+                      data.vehicle.distanceUnit,
+                    ),
+                  ),
+                if (!data.item.isExpiry || data.history.isNotEmpty) ...[
+                  const DTSectionHeader(title: 'History'),
+                  if (data.history.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: DTSpacing.lg),
+                      child: Text('No services have completed this item yet.'),
+                    )
+                  else
+                    for (final completion in data.history)
+                      ListTile(
+                        key: Key('maintenanceHistory_${completion.serviceId}'),
+                        leading: Icon(
+                          completion.isBaseline
+                              ? Icons.flag_outlined
+                              : Icons.build_circle_outlined,
+                        ),
+                        title: Text(
+                          completion.isBaseline
+                              ? 'Baseline completion'
+                              : completion.itemName,
+                        ),
+                        subtitle: Text(
+                          _historySubtitle(completion, data.vehicle),
+                        ),
+                        trailing: completion.isBaseline
+                            ? null
+                            : Text(
+                                DTFormatters.moneyMinor(
+                                  completion.totalCostMinor,
+                                ),
+                              ),
+                        onTap: () async {
+                          final controller = context
+                              .read<DriveTrackerController>();
+                          final service = await controller.serviceRecordById(
+                            completion.serviceId,
+                          );
+                          if (service == null) {
+                            return;
+                          }
+                          if (!context.mounted) {
+                            return;
+                          }
+                          await AppNavigation.openService(
+                            context,
+                            service: service,
+                          );
+                          if (!context.mounted) {
+                            return;
+                          }
+                          _refresh();
+                        },
+                      ),
+                ],
               ],
             ),
           ),
@@ -281,22 +327,42 @@ class _DefinitionRows extends StatelessWidget {
     return Column(
       children: [
         _InfoRow(label: 'Category', value: item.category ?? '-'),
-        _InfoRow(
-          label: 'Mileage interval',
-          value: item.mileageInterval == null
-              ? '-'
-              : DTFormatters.odometer(
-                  item.mileageInterval,
-                  vehicle.distanceUnit,
-                ),
-        ),
-        _InfoRow(
-          label: 'Time interval',
-          value: item.timeIntervalDays == null
-              ? '-'
-              : '${item.timeIntervalDays} days',
-        ),
+        if (item.isExpiry)
+          _InfoRow(
+            label: 'Expiry date',
+            value: item.expiryDate == null
+                ? 'Setup needed'
+                : DTFormatters.date(item.expiryDate!),
+          ),
+        if (!item.isExpiry)
+          _InfoRow(
+            label: 'Mileage interval',
+            value: item.mileageInterval == null
+                ? '-'
+                : DTFormatters.odometer(
+                    item.mileageInterval,
+                    vehicle.distanceUnit,
+                  ),
+          ),
+        if (!item.isExpiry)
+          _InfoRow(
+            label: 'Time interval',
+            value: item.timeIntervalDays == null
+                ? '-'
+                : '${item.timeIntervalDays} days',
+          ),
         _InfoRow(label: 'Reminder', value: item.reminderEnabled ? 'On' : 'Off'),
+        if (item.reminderEnabled &&
+            (item.isExpiry || item.timeIntervalDays != null))
+          _InfoRow(
+            label: 'Date reminder timing',
+            value:
+                item.reminderSchedule?.summary ??
+                (item.isMot
+                    ? DateReminderSchedule.mot.summary
+                    : '${item.dateWarningDays} days before (existing schedule)'),
+          ),
+        if (item.notes != null) _InfoRow(label: 'Notes', value: item.notes!),
       ],
     );
   }
@@ -310,13 +376,15 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(label),
-      trailing: Text(
-        value,
-        style: Theme.of(context).textTheme.labelLarge
-            ?.copyWith(fontWeight: FontWeight.w500),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: DTSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: DTSpacing.xs),
+          Text(value),
+        ],
       ),
     );
   }

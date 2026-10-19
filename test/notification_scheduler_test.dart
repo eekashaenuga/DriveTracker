@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:drivetracker/app/app_controller.dart';
 import 'package:drivetracker/core/notifications/local_notification_service.dart';
-import 'package:drivetracker/core/product_identity.dart';
 import 'package:drivetracker/features/attachments/domain/attachment_io.dart';
 import 'package:drivetracker/features/data_safety/domain/data_safety_service.dart';
 import 'package:drivetracker/features/documents/domain/vehicle_document.dart';
@@ -51,8 +50,11 @@ void main() {
           ),
         );
         expect(request.scheduledAt, DateTime(2026, 9, 1, 9));
-        expect(request.title, ProductIdentity.name);
-        expect(request.body, 'Ford Fiesta - MOT due on 1 Oct 2026');
+        expect(request.title, 'MOT due in 30 days');
+        expect(
+          request.body,
+          'Ford Fiesta: MOT is due on 1 Oct 2026. Arrange the required maintenance.',
+        );
         expect(client.pendingNotificationIds(), completion([request.id]));
       },
     );
@@ -146,7 +148,10 @@ void main() {
         expect(client.cancelled, contains(oldRequest.id));
         expect(newRequest.id, oldRequest.id);
         expect(newRequest.scheduledAt, DateTime(2027, 8, 11, 9));
-        expect(newRequest.body, 'Commuter - MOT due on 10 Sep 2027');
+        expect(
+          newRequest.body,
+          'Commuter: MOT is due on 10 Sep 2027. Arrange the required maintenance.',
+        );
       },
     );
 
@@ -221,17 +226,24 @@ void main() {
 
       final result = await scheduler.reconcile(enabled: true);
 
-      expect(result.scheduled.map((request) => request.stableId), [
-        'document_date_${insurance.id}',
-        'document_date_${mot.id}',
-      ]);
+      expect(result.scheduled.first.stableId, 'document_date_${insurance.id}');
+      final motRequests = result.scheduled
+          .where((r) => r.payload == 'document_date_${mot.id}')
+          .toList();
+      expect(motRequests, hasLength(10));
+      expect(motRequests.map((r) => r.id).toSet(), hasLength(10));
       expect(
         result.scheduled.first.body,
-        'Ford Fiesta - Insurance expires on 1 Oct 2026',
+        'Ford Fiesta: Insurance expires on 1 Oct 2026. Review and renew this record.',
       );
       expect(
-        result.scheduled.last.body,
-        'Honda Civic - MOT expires on 2 Oct 2026',
+        motRequests.first.body,
+        'Your Honda Civic MOT expires on 2 Oct 2026. Arrange a test before it expires.',
+      );
+      expect(motRequests.last.title, 'MOT expires today');
+      expect(
+        motRequests.last.body,
+        'Your Honda Civic MOT expires today. Arrange a test before normal use continues.',
       );
       expect(result.scheduled.first.body, isNot(contains('Policy ABC123')));
       expect(result.scheduled.last.body, isNot(contains('Certificate ZX9')));
@@ -572,7 +584,7 @@ void main() {
       expect(client.scheduled.single.stableId, 'maintenance_date_${item.id}');
       expect(
         client.scheduled.single.body,
-        'Restored Fiesta - MOT due on 1 Oct 2026',
+        'Restored Fiesta: MOT is due on 1 Oct 2026. Arrange the required maintenance.',
       );
     });
   });

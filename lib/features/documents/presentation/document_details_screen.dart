@@ -319,6 +319,13 @@ class _DetailsSection extends StatelessWidget {
         _DetailRow(label: 'Provider', value: document.provider),
         _DetailRow(label: 'Reference', value: document.referenceNumber),
         _DetailRow(label: 'Notes', value: document.notes),
+        if (document.expiryDate != null)
+          _DetailRow(
+            label: 'Date reminders',
+            value:
+                document.reminderSchedule?.summary ??
+                '30 days before (existing schedule)',
+          ),
         _DetailRow(label: 'Created', value: compactDate(document.createdAt)),
         _DetailRow(label: 'Updated', value: compactDate(document.updatedAt)),
       ],

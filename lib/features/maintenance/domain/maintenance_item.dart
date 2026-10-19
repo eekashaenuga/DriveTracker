@@ -1,8 +1,16 @@
+import '../../reminders/domain/date_reminder_schedule.dart';
+
+enum MaintenanceRecordKind { scheduled, expiry }
+
 class MaintenanceItemDraft {
   const MaintenanceItemDraft({
     required this.vehicleId,
     required this.name,
     this.category,
+    this.kind = MaintenanceRecordKind.scheduled,
+    this.expiryDate,
+    this.notes,
+    this.reminderSchedule,
     this.mileageInterval,
     this.timeIntervalDays,
     this.mileageWarning = 1000,
@@ -13,6 +21,13 @@ class MaintenanceItemDraft {
   final String vehicleId;
   final String name;
   final String? category;
+  final MaintenanceRecordKind kind;
+  final DateTime? expiryDate;
+  final String? notes;
+  final DateReminderSchedule? reminderSchedule;
+  bool get isExpiry => kind == MaintenanceRecordKind.expiry;
+  bool get isMot =>
+      isExpiry && (category ?? name).trim().toUpperCase() == 'MOT';
   final int? mileageInterval;
   final int? timeIntervalDays;
   final int mileageWarning;
@@ -32,6 +47,10 @@ class MaintenanceItem {
     required this.createdAt,
     required this.updatedAt,
     this.category,
+    this.kind = MaintenanceRecordKind.scheduled,
+    this.expiryDate,
+    this.notes,
+    this.reminderSchedule,
     this.mileageInterval,
     this.timeIntervalDays,
   });
@@ -40,6 +59,13 @@ class MaintenanceItem {
   final String vehicleId;
   final String name;
   final String? category;
+  final MaintenanceRecordKind kind;
+  final DateTime? expiryDate;
+  final String? notes;
+  final DateReminderSchedule? reminderSchedule;
+  bool get isExpiry => kind == MaintenanceRecordKind.expiry;
+  bool get isMot =>
+      isExpiry && (category ?? name).trim().toUpperCase() == 'MOT';
   final int? mileageInterval;
   final int? timeIntervalDays;
   final int mileageWarning;
@@ -49,7 +75,8 @@ class MaintenanceItem {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  bool get hasInterval => mileageInterval != null || timeIntervalDays != null;
+  bool get hasInterval =>
+      isExpiry || mileageInterval != null || timeIntervalDays != null;
 
   Map<String, Object?> toMap() {
     return {
@@ -57,6 +84,12 @@ class MaintenanceItem {
       'vehicle_id': vehicleId,
       'name': name,
       'category': category,
+      'record_kind': kind.name,
+      'expiry_date': expiryDate == null
+          ? null
+          : '${expiryDate!.year.toString().padLeft(4, '0')}-${expiryDate!.month.toString().padLeft(2, '0')}-${expiryDate!.day.toString().padLeft(2, '0')}',
+      'notes': notes,
+      'reminder_schedule': reminderSchedule?.toJson(),
       'mileage_interval': mileageInterval,
       'time_interval_days': timeIntervalDays,
       'mileage_warning': mileageWarning,
@@ -74,6 +107,14 @@ class MaintenanceItem {
       vehicleId: map['vehicle_id'] as String,
       name: map['name'] as String,
       category: map['category'] as String?,
+      kind: MaintenanceRecordKind.values.byName(
+        map['record_kind'] as String? ?? 'scheduled',
+      ),
+      expiryDate: map['expiry_date'] == null
+          ? null
+          : DateTime.parse(map['expiry_date'] as String),
+      notes: map['notes'] as String?,
+      reminderSchedule: DateReminderSchedule.fromJson(map['reminder_schedule']),
       mileageInterval: map['mileage_interval'] as int?,
       timeIntervalDays: map['time_interval_days'] as int?,
       mileageWarning: map['mileage_warning'] as int,

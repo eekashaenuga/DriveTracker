@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 class DatabaseMigrations {
   const DatabaseMigrations._();
 
-  static const schemaVersion = 4;
+  static const schemaVersion = 5;
 
   static const _allTables = [
     'vehicles',
@@ -261,7 +261,7 @@ class DatabaseMigrations {
       if (!tableNames.contains(table)) {
         throw StateError('SQLite schema is missing table "$table".');
       }
-      await _validateColumns(db, table);
+      await _validateColumns(db, table, version);
     }
 
     final indexRows = await db.query(
@@ -296,6 +296,9 @@ class DatabaseMigrations {
     if (version >= 4) {
       await _createV4(db);
     }
+    if (version >= 5) {
+      await _createV5(db);
+    }
   }
 
   static Future<void> migrate(
@@ -313,6 +316,9 @@ class DatabaseMigrations {
           break;
         case 4:
           await _createV4(db);
+          break;
+        case 5:
+          await _createV5(db);
           break;
         default:
           throw StateError(
@@ -690,11 +696,44 @@ class DatabaseMigrations {
     ''');
   }
 
+  static Future<void> _createV5(sqflite.DatabaseExecutor db) async {
+    await db.execute(
+      "ALTER TABLE maintenance_items ADD COLUMN record_kind TEXT NOT NULL DEFAULT 'scheduled' CHECK (record_kind IN ('scheduled', 'expiry'))",
+    );
+    await db.execute(
+      'ALTER TABLE maintenance_items ADD COLUMN expiry_date TEXT',
+    );
+    await db.execute('ALTER TABLE maintenance_items ADD COLUMN notes TEXT');
+    await db.execute(
+      'ALTER TABLE maintenance_items ADD COLUMN reminder_schedule TEXT',
+    );
+    await db.execute('ALTER TABLE documents ADD COLUMN reminder_schedule TEXT');
+    // Keep the existing index contract, but scope names to the two distinct
+    // record types. No records or linked service history are modified.
+    await db.execute('DROP INDEX idx_maintenance_items_active_name');
+    await db.execute(
+      "CREATE UNIQUE INDEX idx_maintenance_items_active_name ON maintenance_items (vehicle_id, record_kind, name COLLATE NOCASE) WHERE is_archived = 0",
+    );
+  }
+
   static Future<void> _validateColumns(
     sqflite.DatabaseExecutor db,
     String table,
+    int version,
   ) async {
-    final expectedColumns = _requiredColumnsByTable[table];
+    final baseColumns = _requiredColumnsByTable[table];
+    final expectedColumns = baseColumns == null
+        ? null
+        : [
+            ...baseColumns,
+            if (version >= 5 && table == 'maintenance_items') ...[
+              'record_kind',
+              'expiry_date',
+              'notes',
+              'reminder_schedule',
+            ],
+            if (version >= 5 && table == 'documents') 'reminder_schedule',
+          ];
     if (expectedColumns == null) {
       throw StateError('No schema column contract registered for "$table".');
     }

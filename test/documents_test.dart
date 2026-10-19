@@ -72,7 +72,7 @@ void main() {
       addTearDown(database.close);
       final db = await database.database;
 
-      expect(await db.getVersion(), 4);
+      expect(await db.getVersion(), DatabaseMigrations.schemaVersion);
       expect((await db.query('vehicles')).single['id'], 'veh_1');
       expect((await db.query('odometer_entries')).single['id'], 'odo_1');
       expect((await db.query('app_settings')).single['value'], 'veh_1');

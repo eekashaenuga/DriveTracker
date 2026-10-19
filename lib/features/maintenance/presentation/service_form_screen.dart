@@ -451,10 +451,10 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
     if (vehicleId == null) {
       return Future.value(const []);
     }
-    return context.read<DriveTrackerController>().maintenanceItemsForVehicle(
-      vehicleId,
-      includeArchived: _isEditing,
-    );
+    return context
+        .read<DriveTrackerController>()
+        .maintenanceItemsForVehicle(vehicleId, includeArchived: _isEditing)
+        .then((items) => items.where((item) => !item.isExpiry).toList());
   }
 
   Future<void> _save({

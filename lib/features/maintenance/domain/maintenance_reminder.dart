@@ -2,6 +2,7 @@ import 'maintenance_item.dart';
 import 'service_record.dart';
 
 enum MaintenanceReminderState {
+  setupNeeded('Setup needed'),
   normal('Normal'),
   upcoming('Upcoming'),
   dueSoon('Due soon'),
@@ -14,6 +15,7 @@ enum MaintenanceReminderState {
 
   int get severity {
     return switch (this) {
+      MaintenanceReminderState.setupNeeded => -1,
       MaintenanceReminderState.normal => 0,
       MaintenanceReminderState.upcoming => 1,
       MaintenanceReminderState.dueSoon => 2,
@@ -51,7 +53,7 @@ class MaintenanceReminder {
   final List<MaintenanceCompletion> completions;
 
   bool get shouldShowAsReminder {
-    return item.reminderEnabled && item.hasInterval && !item.isArchived;
+    return item.reminderEnabled && !item.isArchived;
   }
 
   double? get intervalProgress {

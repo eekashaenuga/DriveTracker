@@ -12,7 +12,7 @@ Implemented through Milestone 10:
 
 - Material 3 app shell with Home, Insights, central add action, Reminders, and More.
 - First-run flow from welcome screen to adding the first vehicle.
-- SQLite schema version 4 with controlled migrations from V1, V2, and V3.
+- SQLite schema version 5 with controlled additive migrations from V1–V4.
 - Vehicle creation, editing, listing, switching, and archiving.
 - Multiple active vehicles with persisted selected vehicle.
 - Odometer entries with manual readings and historical lower-reading confirmation.
@@ -24,7 +24,7 @@ Implemented through Milestone 10:
 - Vehicle-related income with seeded and custom categories.
 - Service records with one garage visit containing one or more tracked or untracked service items.
 - User-defined maintenance items with optional mileage intervals, date intervals, warning thresholds, and archiving.
-- A calculated reminder engine for normal, upcoming, due-soon, due, and overdue maintenance states.
+- A calculated reminder engine for setup-needed, normal, upcoming, due-soon, due, and overdue maintenance states.
 - Zero-cost baseline maintenance history for establishing last-completed mileage/date without creating fake spend.
 - Functional Reminders screen for the selected vehicle, including direct "Record service" flows.
 - Unified History for fuel, expense, income, service, and manual odometer records, with vehicle, record type, date-range, category, and text-search filters.
@@ -40,7 +40,7 @@ Implemented through Milestone 10:
 - Selected-vehicle calculator defaults that can use the current vehicle's latest trustworthy full-to-full fuel economy and latest recorded fuel price, while keeping manual input available and clearly labelled.
 - Ephemeral fuel estimates that do not create refuels, expenses, services, odometer readings, calculator history, or any other persisted vehicle record.
 - Data & Storage tools for local backup creation, backup inspection/restore with a safety backup first, and CSV export for spreadsheet review.
-- Backup format version 1 with schema version 4 database data and managed attachments kept portable through relative attachment paths.
+- Backup format version 1 with schema version 5 database data (older supported databases migrate on restore) and managed attachments kept portable through relative attachment paths.
 - A consolidated Vehnora presentation system using shared spacing/radius tokens, category accents, icon treatments, metric cards, list cards, status badges, and form sections.
 - A polished Home dashboard with stronger vehicle identity, current odometer context, category-aware metrics, reminder status badges, interactive spending trend, and cleaner recent activity rows.
 - A two-column graphical quick-entry sheet for Refuel, Service, Expense, Income, Odometer, and Maintenance entry points on phone-width layouts.
@@ -141,7 +141,7 @@ Notification schedules are not part of the portable backup format. Reminder data
 
 Vehnora V1 supports Android local notifications for date-based reminders. Users enable them from Settings, which requests Android notification permission in context rather than on first launch. If permission is denied or later disabled in Android, in-app reminders continue to work and scheduled local alerts are not treated as enabled.
 
-Date reminders are scheduled for 9:00 AM local time. Maintenance date reminders use the item's existing date warning threshold to choose the first alert day. Document expiry reminders use the existing 30-day expiry reminder window. Vehnora uses inexact Android scheduling for these ordinary reminders and does not request exact-alarm permission.
+Date reminders are scheduled for 9:00 AM local time. Existing records retain their single date-warning schedule until timing is customized. New MOT expiry records use calendar offsets at three months, one month, 15 days and seven days before expiry, plus an inclusive daily countdown from seven days before through expiry. Overlapping days are deduplicated and past alert times are omitted. Users can add/remove offsets and adjust the countdown in maintenance and document forms. Vehnora uses inexact Android scheduling for these ordinary reminders and does not request exact-alarm permission.
 
 Mileage reminders remain in-app for V1. They update when odometer data changes, but Vehnora does not run continuous background mileage monitoring or claim closed-app mileage notifications.
 
@@ -205,3 +205,13 @@ Public naming is independent of persistent identity: retain
 channels/provider authority, backup manifest app marker `DriveTracker`, MIME type
 `application/vnd.drivetracker.backup`, and `.dtbackup` files. Schema remains 4,
 backup format remains 1, and app version remains `1.1.0+2`.
+
+## Maintenance, MOT and expiry reminders (V1.1)
+
+Scheduled maintenance continues to derive its next date/mileage from service completions and zero-cost baselines. With both intervals, the more urgent threshold drives attention. Incomplete schedules are explicitly marked Setup needed; permission denial does not hide in-app status.
+
+MOT, insurance, road tax and custom date reminders can be created through Maintenance & expiry. Expiry records need an expiry date and use renewal instead of service completion. Existing V4 items, including items named MOT, remain scheduled maintenance so linked history is never silently reinterpreted. Create a separate expiry record and archive an old interval record when moving to expiry-only tracking.
+
+V5 adds record kind, expiry date, notes and reminder timing to maintenance items, and reminder timing to documents. No tables or existing records are dropped. Active-name uniqueness is scoped by vehicle and record kind, so an old MOT interval can coexist with an expiry-only MOT record. Backup container format stays V1; V4 backups restore through the normal migration path. Notification schedules are rebuilt from database records, including after edits, archive/delete, and restore.
+
+Home and Reminders prioritize overdue, due, due-soon and upcoming records before incomplete setup, including date documents. Notification wording is shared with maintenance details and evaluated for the delivery day. MOT exception wording follows https://www.gov.uk/getting-an-mot; the app does not verify a certificate or vehicle roadworthiness.

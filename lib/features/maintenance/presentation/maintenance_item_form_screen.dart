@@ -7,6 +7,9 @@ import '../../../app/theme/dt_tokens.dart';
 import '../../../core/utilities/formatters.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
+import '../../../shared/widgets/dt_date_field.dart';
+import '../../../shared/widgets/date_reminder_editor.dart';
+import '../../reminders/domain/date_reminder_schedule.dart';
 import '../../../shared/widgets/dt_odometer_input.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
 import '../../vehicles/domain/vehicle.dart';
@@ -24,6 +27,10 @@ class MaintenanceItemFormScreen extends StatefulWidget {
 
 class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _notesController = TextEditingController();
+  MaintenanceRecordKind _kind = MaintenanceRecordKind.scheduled;
+  DateTime? _expiryDate;
+  DateReminderSchedule? _schedule;
   final _nameController = TextEditingController();
   final _categoryController = TextEditingController();
   final _mileageIntervalController = TextEditingController();
@@ -47,6 +54,10 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
     super.initState();
     final item = widget.item;
     if (item != null) {
+      _kind = item.kind;
+      _expiryDate = item.expiryDate;
+      _schedule = item.reminderSchedule;
+      _notesController.text = item.notes ?? '';
       _vehicleId = item.vehicleId;
       _nameController.text = item.name;
       _categoryController.text = item.category ?? '';
@@ -72,6 +83,7 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
 
   @override
   void dispose() {
+    _notesController.dispose();
     _nameController.dispose();
     _categoryController.dispose();
     _mileageIntervalController.dispose();
@@ -102,7 +114,13 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit maintenance item' : 'Add maintenance'),
+        title: Text(
+          _isEditing
+              ? (_kind == MaintenanceRecordKind.expiry
+                    ? 'Edit expiry reminder'
+                    : 'Edit maintenance item')
+              : 'Maintenance & expiry',
+        ),
       ),
       bottomNavigationBar: SafeArea(
         top: false,
@@ -128,6 +146,51 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
           child: ListView(
             padding: const EdgeInsets.all(DTSpacing.lg),
             children: [
+              if (!_isEditing) ...[
+                Wrap(
+                  spacing: DTSpacing.sm,
+                  runSpacing: DTSpacing.sm,
+                  children: [
+                    ChoiceChip(
+                      key: const Key('scheduledMaintenanceChoice'),
+                      label: const Text('Scheduled maintenance'),
+                      selected: _kind == MaintenanceRecordKind.scheduled,
+                      onSelected: (_) => setState(() {
+                        _kind = MaintenanceRecordKind.scheduled;
+                        _nameController.clear();
+                        _categoryController.clear();
+                        _schedule = null;
+                      }),
+                    ),
+                    ChoiceChip(
+                      key: const Key('expiryReminderChoice'),
+                      label: const Text('MOT / date expiry'),
+                      selected: _kind == MaintenanceRecordKind.expiry,
+                      onSelected: (_) => setState(() {
+                        _kind = MaintenanceRecordKind.expiry;
+                        _nameController.text = 'MOT';
+                        _categoryController.text = 'MOT';
+                        _schedule = DateReminderSchedule.mot;
+                      }),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: DTSpacing.lg),
+              ],
+              Text(
+                _kind == MaintenanceRecordKind.expiry
+                    ? 'Track an expiry date. Renew it when a new certificate or policy is available.'
+                    : 'Service intervals advance when you record a completion. With both intervals, the first due threshold needs attention.',
+              ),
+              if (_isEditing &&
+                  _kind == MaintenanceRecordKind.scheduled &&
+                  _nameController.text.trim().toUpperCase() == 'MOT') ...[
+                const SizedBox(height: DTSpacing.sm),
+                const Text(
+                  'This existing interval record keeps its service history. For expiry-only tracking, create a separate MOT / date expiry reminder, then archive this item.',
+                ),
+              ],
+              const SizedBox(height: DTSpacing.lg),
               DropdownButtonFormField<String>(
                 isExpanded: true,
                 key: const Key('maintenanceVehicleField'),
@@ -176,47 +239,92 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
                 },
               ),
               const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('maintenanceCategoryField'),
-                controller: _categoryController,
-                textCapitalization: TextCapitalization.words,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Category'),
-              ),
-              const SizedBox(height: DTSpacing.xl),
-              Text(
-                'Intervals',
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('maintenanceMileageIntervalField'),
-                controller: _mileageIntervalController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
-                  labelText: 'Mileage interval',
-                  suffixText: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+              if (_kind == MaintenanceRecordKind.expiry) ...[
+                DropdownButtonFormField<String>(
+                  key: const Key('expiryTypeField'),
+                  initialValue:
+                      [
+                        'MOT',
+                        'Insurance',
+                        'Road tax',
+                        'Other',
+                      ].contains(_categoryController.text)
+                      ? _categoryController.text
+                      : 'Other',
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Expiry type'),
+                  items: [
+                    for (final type in [
+                      'MOT',
+                      'Insurance',
+                      'Road tax',
+                      'Other',
+                    ])
+                      DropdownMenuItem(value: type, child: Text(type)),
+                  ],
+                  onChanged: (type) => setState(() {
+                    _categoryController.text = type!;
+                    _nameController.text = type;
+                    _schedule = type == 'MOT'
+                        ? DateReminderSchedule.mot
+                        : DateReminderSchedule.standard;
+                  }),
                 ),
-                validator: (value) =>
-                    _validateOptionalPositiveInt(value, 'Mileage interval'),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('maintenanceTimeIntervalField'),
-                controller: _timeIntervalController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Time interval',
-                  suffixText: 'days',
+                const SizedBox(height: DTSpacing.lg),
+                DTDateField(
+                  fieldKey: const Key('maintenanceExpiryDateField'),
+                  label: _categoryController.text == 'MOT'
+                      ? 'MOT expiry date'
+                      : 'Expiry date',
+                  value: _expiryDate,
+                  currentDate: controller.currentTime,
+                  onChanged: (date) => setState(() => _expiryDate = date),
                 ),
-                validator: (value) =>
-                    _validateOptionalPositiveInt(value, 'Time interval'),
-              ),
+              ] else ...[
+                TextFormField(
+                  key: const Key('maintenanceCategoryField'),
+                  controller: _categoryController,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                ),
+                const SizedBox(height: DTSpacing.xl),
+                Text(
+                  'Intervals',
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: DTSpacing.md),
+                TextFormField(
+                  key: const Key('maintenanceMileageIntervalField'),
+                  controller: _mileageIntervalController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(
+                    labelText: 'Mileage interval',
+                    suffixText:
+                        selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                  ),
+                  validator: (value) =>
+                      _validateOptionalPositiveInt(value, 'Mileage interval'),
+                ),
+                const SizedBox(height: DTSpacing.md),
+                TextFormField(
+                  key: const Key('maintenanceTimeIntervalField'),
+                  controller: _timeIntervalController,
+                  onChanged: (_) => setState(() {}),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Time interval',
+                    suffixText: 'days',
+                  ),
+                  validator: (value) =>
+                      _validateOptionalPositiveInt(value, 'Time interval'),
+                ),
+              ],
               const SizedBox(height: DTSpacing.lg),
               SwitchListTile(
                 key: const Key('maintenanceReminderSwitch'),
@@ -226,38 +334,69 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
                 subtitle: const Text('Show this item on Home and Reminders'),
                 onChanged: (value) => setState(() => _reminderEnabled = value),
               ),
-              if (_reminderEnabled) ...[
+              if (_reminderEnabled &&
+                  _kind == MaintenanceRecordKind.scheduled) ...[
                 const SizedBox(height: DTSpacing.md),
-                TextFormField(
-                  key: const Key('maintenanceMileageWarningField'),
-                  controller: _mileageWarningController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: 'Mileage warning',
-                    suffixText:
-                        selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                ExpansionTile(
+                  title: const Text('Warning thresholds'),
+                  subtitle: const Text(
+                    'When to flag upcoming maintenance in the app',
                   ),
-                  validator: (value) =>
-                      _validateNonNegativeInt(value, 'Mileage warning'),
-                ),
-                const SizedBox(height: DTSpacing.md),
-                TextFormField(
-                  key: const Key('maintenanceDateWarningField'),
-                  controller: _dateWarningController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Date warning',
-                    suffixText: 'days',
-                  ),
-                  validator: (value) =>
-                      _validateNonNegativeInt(value, 'Date warning'),
+                  tilePadding: EdgeInsets.zero,
+                  children: [
+                    TextFormField(
+                      key: const Key('maintenanceMileageWarningField'),
+                      controller: _mileageWarningController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: 'Mileage warning',
+                        suffixText:
+                            selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                      ),
+                      validator: (value) =>
+                          _validateNonNegativeInt(value, 'Mileage warning'),
+                    ),
+                    const SizedBox(height: DTSpacing.md),
+                    TextFormField(
+                      key: const Key('maintenanceDateWarningField'),
+                      controller: _dateWarningController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Date warning',
+                        suffixText: 'days',
+                      ),
+                      validator: (value) =>
+                          _validateNonNegativeInt(value, 'Date warning'),
+                    ),
+                  ],
                 ),
               ],
-              if (!_isEditing) ...[
+              if (_reminderEnabled &&
+                  (_kind == MaintenanceRecordKind.expiry ||
+                      _timeIntervalController.text.trim().isNotEmpty)) ...[
+                const SizedBox(height: DTSpacing.lg),
+                DateReminderEditor(
+                  value:
+                      _schedule ??
+                      DateReminderSchedule(
+                        offsets: [
+                          ReminderOffset(
+                            _parseOptionalInt(_dateWarningController.text) ??
+                                30,
+                          ),
+                        ],
+                      ),
+                  showMotPreset:
+                      _kind == MaintenanceRecordKind.expiry &&
+                      _categoryController.text == 'MOT',
+                  onChanged: (value) => setState(() => _schedule = value),
+                ),
+              ],
+              if (!_isEditing && _kind == MaintenanceRecordKind.scheduled) ...[
                 const SizedBox(height: DTSpacing.xl),
                 SwitchListTile(
                   key: const Key('maintenanceBaselineSwitch'),
@@ -297,6 +436,16 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
                   ),
                 ],
               ],
+              const SizedBox(height: DTSpacing.lg),
+              TextFormField(
+                key: const Key('maintenanceNotesField'),
+                controller: _notesController,
+                maxLines: 4,
+                minLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                ),
+              ),
               if (_formError != null) ...[
                 const SizedBox(height: DTSpacing.lg),
                 Text(
@@ -326,12 +475,24 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
       return;
     }
 
+    if (_kind == MaintenanceRecordKind.expiry && _expiryDate == null) {
+      setState(() => _formError = 'Choose an expiry date.');
+      return;
+    }
     final draft = MaintenanceItemDraft(
       vehicleId: vehicleId,
       name: _nameController.text,
+      kind: _kind,
+      expiryDate: _kind == MaintenanceRecordKind.expiry ? _expiryDate : null,
+      notes: _notesController.text,
+      reminderSchedule: _schedule,
       category: _categoryController.text,
-      mileageInterval: _parseOptionalInt(_mileageIntervalController.text),
-      timeIntervalDays: _parseOptionalInt(_timeIntervalController.text),
+      mileageInterval: _kind == MaintenanceRecordKind.expiry
+          ? null
+          : _parseOptionalInt(_mileageIntervalController.text),
+      timeIntervalDays: _kind == MaintenanceRecordKind.expiry
+          ? null
+          : _parseOptionalInt(_timeIntervalController.text),
       mileageWarning: _parseOptionalInt(_mileageWarningController.text) ?? 1000,
       dateWarningDays: _parseOptionalInt(_dateWarningController.text) ?? 30,
       reminderEnabled: _reminderEnabled,
@@ -344,8 +505,12 @@ class _MaintenanceItemFormScreenState extends State<MaintenanceItemFormScreen> {
       } else {
         await controller.addMaintenanceItem(
           draft,
-          baselineDateTime: _addBaseline ? _baselineDate : null,
-          baselineOdometer: _addBaseline
+          baselineDateTime:
+              _addBaseline && _kind == MaintenanceRecordKind.scheduled
+              ? _baselineDate
+              : null,
+          baselineOdometer:
+              _addBaseline && _kind == MaintenanceRecordKind.scheduled
               ? _parseOptionalInt(_baselineOdometerController.text)
               : null,
         );

@@ -1,3 +1,4 @@
+import '../../reminders/domain/date_reminder_schedule.dart';
 import '../../maintenance/domain/maintenance_reminder.dart';
 
 const defaultDocumentCategories = [
@@ -42,6 +43,7 @@ class VehicleDocumentDraft {
     this.referenceNumber,
     this.provider,
     this.notes,
+    this.reminderSchedule,
   });
 
   final String vehicleId;
@@ -52,6 +54,7 @@ class VehicleDocumentDraft {
   final String? referenceNumber;
   final String? provider;
   final String? notes;
+  final DateReminderSchedule? reminderSchedule;
 }
 
 class VehicleDocument {
@@ -68,6 +71,7 @@ class VehicleDocument {
     this.referenceNumber,
     this.provider,
     this.notes,
+    this.reminderSchedule,
     this.reminderId,
     this.archivedAt,
   });
@@ -81,6 +85,7 @@ class VehicleDocument {
   final String? referenceNumber;
   final String? provider;
   final String? notes;
+  final DateReminderSchedule? reminderSchedule;
   final String? reminderId;
   final bool isArchived;
   final DateTime? archivedAt;
@@ -92,7 +97,7 @@ class VehicleDocument {
     if (expiry == null) {
       return null;
     }
-    return _dateOnly(expiry).difference(_dateOnly(asOf)).inDays;
+    return calendarDaysBetween(expiry, asOf);
   }
 
   DocumentStatus statusAt(DateTime asOf) {
@@ -132,6 +137,7 @@ class VehicleDocument {
       provider: provider ?? this.provider,
       notes: notes ?? this.notes,
       reminderId: reminderId,
+      reminderSchedule: reminderSchedule,
       isArchived: isArchived ?? this.isArchived,
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt,
@@ -150,6 +156,7 @@ class VehicleDocument {
       'reference_number': referenceNumber,
       'provider': provider,
       'notes': notes,
+      'reminder_schedule': reminderSchedule?.toJson(),
       'reminder_id': reminderId,
       'is_archived': isArchived ? 1 : 0,
       'archived_at': archivedAt?.toUtc().toIso8601String(),
@@ -169,6 +176,7 @@ class VehicleDocument {
       referenceNumber: map['reference_number'] as String?,
       provider: map['provider'] as String?,
       notes: map['notes'] as String?,
+      reminderSchedule: DateReminderSchedule.fromJson(map['reminder_schedule']),
       reminderId: map['reminder_id'] as String?,
       isArchived: map['is_archived'] == 1,
       archivedAt: _dateTimeFromStorage(map['archived_at']),
@@ -225,11 +233,6 @@ class DocumentExpiryReminder {
       daysRemaining: days,
     );
   }
-}
-
-DateTime _dateOnly(DateTime value) {
-  final local = value.toLocal();
-  return DateTime(local.year, local.month, local.day);
 }
 
 String? _dateToStorage(DateTime? value) {

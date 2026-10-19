@@ -1,3 +1,4 @@
+import '../../reminders/domain/date_reminder_schedule.dart';
 import 'maintenance_item.dart';
 import 'maintenance_reminder.dart';
 import 'service_record.dart';
@@ -16,6 +17,22 @@ class MaintenanceReminderEngine {
     required int? currentOdometer,
     required DateTime asOf,
   }) {
+    if (item.isExpiry) {
+      final due = item.expiryDate;
+      final days = due == null ? null : calendarDaysBetween(due, asOf);
+      return MaintenanceReminder(
+        item: item,
+        state: days == null
+            ? MaintenanceReminderState.setupNeeded
+            : _stateForDays(days, warningThreshold: item.dateWarningDays),
+        primaryBasis: due == null
+            ? MaintenanceReminderBasis.none
+            : MaintenanceReminderBasis.date,
+        nextDateDue: due,
+        daysRemaining: days,
+        completions: completions,
+      );
+    }
     final sortedCompletions = [...completions]..sort(_compareCompletions);
     final latestCompletion = sortedCompletions.isEmpty
         ? null
@@ -34,7 +51,6 @@ class MaintenanceReminderEngine {
     final mileageInterval = item.mileageInterval;
     final latestOdometer = latestMileageCompletion?.odometer;
     if (!item.isArchived &&
-        item.reminderEnabled &&
         mileageInterval != null &&
         latestOdometer != null &&
         currentOdometer != null) {
@@ -51,12 +67,11 @@ class MaintenanceReminderEngine {
     var dateState = MaintenanceReminderState.normal;
     final timeIntervalDays = item.timeIntervalDays;
     if (!item.isArchived &&
-        item.reminderEnabled &&
         timeIntervalDays != null &&
         latestCompletion != null) {
       nextDateDue = _dateOnly(latestCompletion.eventDateTime)
           .add(Duration(days: timeIntervalDays));
-      daysRemaining = nextDateDue.difference(_dateOnly(asOf)).inDays;
+      daysRemaining = calendarDaysBetween(nextDateDue, asOf);
       dateState = _stateForDays(
         daysRemaining,
         warningThreshold: item.dateWarningDays,
@@ -69,7 +84,16 @@ class MaintenanceReminderEngine {
       milesRemaining: milesRemaining,
       daysRemaining: daysRemaining,
     );
-    final state = primaryBasis == MaintenanceReminderBasis.date
+    final missingBaseline =
+        (item.mileageInterval != null && nextMileageDue == null) ||
+        (item.timeIntervalDays != null && nextDateDue == null);
+    final state =
+        primaryBasis == MaintenanceReminderBasis.none ||
+            (missingBaseline &&
+                mileageState == MaintenanceReminderState.normal &&
+                dateState == MaintenanceReminderState.normal)
+        ? MaintenanceReminderState.setupNeeded
+        : primaryBasis == MaintenanceReminderBasis.date
         ? dateState
         : mileageState.severity >= dateState.severity
         ? mileageState

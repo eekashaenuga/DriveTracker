@@ -732,7 +732,7 @@ void main() {
         );
         expect(
           notifications.scheduled.single.body,
-          'Restored Fiesta - Engine Oil due on 1 Oct 2026',
+          'Restored Fiesta: Engine Oil is due on 1 Oct 2026. Arrange the required maintenance.',
         );
         expect(await notifications.pendingNotificationIds(), [
           notifications.scheduled.single.id,

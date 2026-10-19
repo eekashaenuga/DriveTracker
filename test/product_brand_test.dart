@@ -20,7 +20,7 @@ void main() {
   });
 
   test('rebranding retains persistent V1 identity and backup contract', () {
-    expect(DatabaseMigrations.schemaVersion, 4);
+    expect(DatabaseMigrations.schemaVersion, 5);
     expect(DataSafetyService.backupFormatVersion, 1);
     expect(
       DataSafetyService.backupMimeType,

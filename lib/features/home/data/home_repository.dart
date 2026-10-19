@@ -1,3 +1,5 @@
+import '../../documents/data/document_repository.dart';
+import '../../documents/domain/vehicle_document.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../daily_records/data/activity_repository.dart';
 import '../../daily_records/data/financial_summary_repository.dart';
@@ -13,6 +15,7 @@ import '../domain/vehicle_dashboard.dart';
 
 class HomeRepository {
   HomeRepository({
+    this.documentRepository,
     required this.vehicleRepository,
     required this.odometerRepository,
     required this.refuelRepository,
@@ -23,6 +26,7 @@ class HomeRepository {
     MaintenanceReminderEngine? reminderEngine,
   }) : _reminderEngine = reminderEngine ?? const MaintenanceReminderEngine();
 
+  final DocumentRepository? documentRepository;
   final VehicleRepository vehicleRepository;
   final OdometerRepository odometerRepository;
   final RefuelRepository refuelRepository;
@@ -84,6 +88,23 @@ class HomeRepository {
       );
     }
     final nextMaintenanceAttention = _homeMaintenanceAttention(reminders);
+    final documents =
+        await documentRepository?.activeExpiringForVehicle(vehicleId) ??
+        <VehicleDocument>[];
+    final documentReminders =
+        documents
+            .map(
+              (d) => DocumentExpiryReminder.evaluate(document: d, asOf: asOf),
+            )
+            .where((r) => r.shouldShowAsReminder)
+            .toList()
+          ..sort((a, b) {
+            final severity = b.state.severity.compareTo(a.state.severity);
+            return severity == 0
+                ? a.daysRemaining.compareTo(b.daysRemaining)
+                : severity;
+          });
+    final nextDocumentAttention = documentReminders.firstOrNull;
 
     return VehicleDashboard(
       vehicle: vehicle,
@@ -94,6 +115,7 @@ class HomeRepository {
       latestFuelEconomyInterval: latestFuelEconomyInterval,
       recentActivity: recentActivity,
       nextMaintenanceAttention: nextMaintenanceAttention,
+      nextDocumentAttention: nextDocumentAttention,
       spendingTrend: spendingTrend,
     );
   }
@@ -105,12 +127,13 @@ class HomeRepository {
       reminders.where((reminder) => reminder.shouldShowAsReminder),
     );
     for (final reminder in sorted) {
-      if (reminder.primaryBasis == MaintenanceReminderBasis.none ||
-          reminder.state.severity >=
-              MaintenanceReminderState.upcoming.severity) {
+      if (reminder.state.severity >=
+          MaintenanceReminderState.upcoming.severity) {
         return reminder;
       }
     }
-    return null;
+    return sorted
+        .where((r) => r.state == MaintenanceReminderState.setupNeeded)
+        .firstOrNull;
   }
 }

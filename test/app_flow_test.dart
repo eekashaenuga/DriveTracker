@@ -1560,6 +1560,10 @@ void main() {
       mimeType: 'application/pdf',
       fileSize: 4,
     );
+    await _scrollUntilFound(
+      tester,
+      find.byKey(Key('addAttachment_${document.id}')),
+    );
     await _tapAndRunAsync(
       tester,
       find.byKey(Key('addAttachment_${document.id}')),
