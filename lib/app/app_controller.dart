@@ -309,9 +309,40 @@ class DriveTrackerController extends ChangeNotifier {
     return _odometerRepository.allForVehicle(vehicleId);
   }
 
-  Future<List<RecordCategory>> categoriesFor(RecordCategoryType type) {
-    return _categoryRepository.listByType(type);
+  Future<List<RecordCategory>> categoriesFor(
+    RecordCategoryType type, {
+    bool includeArchived = false,
+  }) {
+    return _categoryRepository.listByType(
+      type,
+      includeArchived: includeArchived,
+    );
   }
+
+  Future<RecordCategory?> categoryById(String id) =>
+      _categoryRepository.getById(id);
+
+  Future<List<RecordCategory>> categoryChoices(
+    RecordCategoryType type, {
+    String? originalCategoryId,
+  }) async {
+    final active = await categoriesFor(type);
+    if (originalCategoryId != null &&
+        !active.any((c) => c.id == originalCategoryId)) {
+      final original = await categoryById(originalCategoryId);
+      if (original != null && original.type == type) active.add(original);
+    }
+    return active;
+  }
+
+  Future<void> renameCategory(String id, String name) =>
+      _runMutation(() => _categoryService.rename(id, name));
+  Future<void> archiveCategory(String id, bool archived) =>
+      _runMutation(() => _categoryService.setArchived(id, archived));
+  Future<void> deleteCategory(String id) =>
+      _runMutation(() => _categoryService.delete(id));
+  Future<void> reorderCategories(RecordCategoryType type, List<String> ids) =>
+      _runMutation(() => _categoryService.reorder(type, ids));
 
   Future<List<DailyActivity>> historyForSelectedVehicle({
     DailyActivityType type = DailyActivityType.all,

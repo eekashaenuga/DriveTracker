@@ -14,12 +14,14 @@ class AttachmentPanel extends StatefulWidget {
     required this.parentType,
     required this.parentId,
     this.compact = false,
+    this.readOnly = false,
     super.key,
   });
 
   final AttachmentParentType parentType;
   final String parentId;
   final bool compact;
+  final bool readOnly;
 
   @override
   State<AttachmentPanel> createState() => _AttachmentPanelState();
@@ -68,12 +70,13 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
                     ),
                   ),
                 ),
-                IconButton.filledTonal(
-                  key: Key('addAttachment_${widget.parentId}'),
-                  tooltip: 'Add attachment',
-                  onPressed: _addAttachment,
-                  icon: const Icon(Icons.add_rounded),
-                ),
+                if (!widget.readOnly)
+                  IconButton.filledTonal(
+                    key: Key('addAttachment_${widget.parentId}'),
+                    tooltip: 'Add attachment',
+                    onPressed: _addAttachment,
+                    icon: const Icon(Icons.add_rounded),
+                  ),
               ],
             ),
             if (_errorMessage != null) ...[
@@ -108,6 +111,7 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
                       _AttachmentTile(
                         key: Key('attachment_${attachment.id}'),
                         attachment: attachment,
+                        readOnly: widget.readOnly,
                         onOpen: () => _openAttachment(attachment),
                         onRemove: () => _removeAttachment(attachment),
                       ),
@@ -220,12 +224,14 @@ class _AttachmentTile extends StatelessWidget {
   const _AttachmentTile({
     required this.attachment,
     required this.onOpen,
+    required this.readOnly,
     required this.onRemove,
     super.key,
   });
 
   final Attachment attachment;
   final VoidCallback onOpen;
+  final bool readOnly;
   final VoidCallback onRemove;
 
   @override
@@ -309,11 +315,12 @@ class _AttachmentTile extends StatelessWidget {
                           onPressed: onOpen,
                           icon: const Icon(Icons.open_in_new_rounded),
                         ),
-                        IconButton(
-                          tooltip: 'Remove ${attachment.fileName}',
-                          onPressed: onRemove,
-                          icon: const Icon(Icons.delete_outline_rounded),
-                        ),
+                        if (!readOnly)
+                          IconButton(
+                            tooltip: 'Remove ${attachment.fileName}',
+                            onPressed: onRemove,
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          ),
                       ],
                     ),
                   ],

@@ -215,7 +215,10 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
                               for (final category in categories)
                                 DropdownMenuItem(
                                   value: category.id,
-                                  child: Text(category.name),
+                                  child: Text(
+                                    '${category.name}${category.isArchived ? ' (archived)' : ''}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                             ],
                             validator: (value) =>
@@ -474,8 +477,9 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
 
   Future<List<RecordCategory>> _loadCategories() async {
     final controller = context.read<DriveTrackerController>();
-    final categories = await controller.categoriesFor(
+    final categories = await controller.categoryChoices(
       RecordCategoryType.expense,
+      originalCategoryId: widget.expense?.categoryId,
     );
     if (mounted && _categoryId == null && categories.isNotEmpty) {
       setState(() => _categoryId = categories.first.id);

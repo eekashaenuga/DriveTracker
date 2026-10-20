@@ -32,6 +32,7 @@ class DailyRecordValidation {
     required CategoryRepository repository,
     required String categoryId,
     required RecordCategoryType type,
+    String? originalCategoryId,
   }) async {
     final category = await repository.getById(categoryId);
     if (category == null || category.type != type) {
@@ -39,7 +40,7 @@ class DailyRecordValidation {
         'Select a ${type.label.toLowerCase()} category.',
       ]);
     }
-    if (category.isArchived) {
+    if (category.isArchived && category.id != originalCategoryId) {
       throw const ValidationException(['Archived categories cannot be used.']);
     }
   }

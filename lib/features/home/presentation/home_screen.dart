@@ -942,6 +942,14 @@ Future<void> _openActivity(BuildContext context, DailyActivity activity) async {
       }
       break;
     case DailyActivityType.odometer:
+      if (context.mounted) {
+        await AppNavigation.openRecordDetails(
+          context,
+          DailyActivityType.odometer,
+          activity.recordId,
+        );
+      }
+      break;
     case DailyActivityType.all:
       break;
   }

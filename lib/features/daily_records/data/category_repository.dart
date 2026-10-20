@@ -115,6 +115,35 @@ class CategoryRepository {
     );
   }
 
+  Future<T> transaction<T>(
+    Future<T> Function(sqflite.DatabaseExecutor) action,
+  ) {
+    return _database.transaction(action);
+  }
+
+  Future<bool> isReferenced(
+    String id, {
+    required sqflite.DatabaseExecutor executor,
+  }) async {
+    final rows = await executor.rawQuery(
+      'SELECT (SELECT COUNT(*) FROM expenses WHERE category_id = ?) + '
+      '(SELECT COUNT(*) FROM income_records WHERE category_id = ?) AS uses',
+      [id, id],
+    );
+    return (rows.single['uses'] as int) > 0;
+  }
+
+  Future<void> delete(
+    String id, {
+    required sqflite.DatabaseExecutor executor,
+  }) async {
+    await executor.delete(
+      'record_categories',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<sqflite.DatabaseExecutor> _executor(
     sqflite.DatabaseExecutor? executor,
   ) async {

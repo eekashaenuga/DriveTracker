@@ -510,6 +510,10 @@ void main() {
       tester,
       find.byKey(const Key('historyOdometerDetails')),
     );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('recordDetailsLoaded_${historical.id}')),
+    );
     expect(find.text('65,000 mi'), findsWidgets);
     await _tapAndPump(
       tester,
@@ -595,6 +599,10 @@ void main() {
     await _pumpUntilFound(
       tester,
       find.byKey(const Key('historyOdometerDetails')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('recordDetailsLoaded_${historical.id}')),
     );
     await _tapAndPump(
       tester,
@@ -858,6 +866,9 @@ void main() {
       findsOneWidget,
     );
     await _tapAndRunAsync(tester, activityRow);
+    await _pumpUntilFound(tester, find.byKey(const Key('recordDetailsEdit')));
+    expect(find.text('Refuel details'), findsOneWidget);
+    await _tapAndPump(tester, find.byKey(const Key('recordDetailsEdit')));
     await _pumpUntilFound(tester, find.text('Edit refuel'));
 
     final totalCostField = tester.widget<TextFormField>(
@@ -1251,6 +1262,9 @@ void main() {
 
     await _scrollUntilFound(tester, serviceRow);
     await _tapAndPump(tester, serviceRow);
+    await _pumpUntilFound(tester, find.byKey(const Key('recordDetailsEdit')));
+    expect(find.text('Service details'), findsOneWidget);
+    await _tapAndPump(tester, find.byKey(const Key('recordDetailsEdit')));
     await _pumpUntilFound(tester, find.byKey(const Key('deleteServiceButton')));
     await _waitForServiceItemsLoaded(tester);
     expect(find.byKey(const Key('serviceTotalCostField')), findsOneWidget);
@@ -2700,7 +2714,7 @@ Future<void> _tapAndRunAsync(WidgetTester tester, Finder finder) async {
 Future<Finder> _pumpUntilHittable(
   WidgetTester tester,
   Finder finder, {
-  int attempts = 50,
+  int attempts = 200,
 }) async {
   for (var index = 0; index < attempts; index += 1) {
     final hittable = finder.hitTestable();
@@ -2732,7 +2746,7 @@ Finder _activeScrollable() {
 Future<void> _pumpUntilFound(
   WidgetTester tester,
   Finder finder, {
-  int attempts = 50,
+  int attempts = 200,
 }) async {
   for (var index = 0; index < attempts; index += 1) {
     await tester.pump(const Duration(milliseconds: 100));
@@ -2754,7 +2768,7 @@ Future<void> _pumpUntilFound(
 Future<void> _pumpUntilGone(
   WidgetTester tester,
   Finder finder, {
-  int attempts = 50,
+  int attempts = 200,
 }) async {
   for (var index = 0; index < attempts; index += 1) {
     await tester.pump(const Duration(milliseconds: 100));

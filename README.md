@@ -203,7 +203,7 @@ Public naming is independent of persistent identity: retain
 `com.eekashaenuga.drivetracker`, the Dart package `drivetracker`, database
 `drive_tracker.db`, notification channel `drive_tracker_reminders`, platform
 channels/provider authority, backup manifest app marker `DriveTracker`, MIME type
-`application/vnd.drivetracker.backup`, and `.dtbackup` files. Schema remains 4,
+`application/vnd.drivetracker.backup`, and `.dtbackup` files. Schema remains 5,
 backup format remains 1, and app version remains `1.1.0+2`.
 
 ## Maintenance, MOT and expiry reminders (V1.1)
@@ -215,3 +215,25 @@ MOT, insurance, road tax and custom date reminders can be created through Mainte
 V5 adds record kind, expiry date, notes and reminder timing to maintenance items, and reminder timing to documents. No tables or existing records are dropped. Active-name uniqueness is scoped by vehicle and record kind, so an old MOT interval can coexist with an expiry-only MOT record. Backup container format stays V1; V4 backups restore through the normal migration path. Notification schedules are rebuilt from database records, including after edits, archive/delete, and restore.
 
 Home and Reminders prioritize overdue, due, due-soon and upcoming records before incomplete setup, including date documents. Notification wording is shared with maintenance details and evaluated for the delivery day. MOT exception wording follows https://www.gov.uk/getting-an-mot; the app does not verify a certificate or vehicle roadworthiness.
+
+## Managed categories and record details (V1.1)
+
+Settings → Manage categories manages persisted expense/income categories: add,
+rename, drag or menu reorder, archive, restore and safe deletion. Built-in values
+are protected from rename/archive/delete; ordering is presentation-only. Referenced
+custom categories cannot be deleted; archive them instead. Names remain reserved
+while archived. Historical records retain their category relationship, and edits
+may retain the original archived category without making it available for new
+records. Category management reuses the existing V5 table; no V6 migration or
+backup format change is needed.
+
+Fuel types, distance units, record kinds and other system enums remain fixed.
+Document category chips and Maintenance/MOT type presets remain fixed suggestions;
+their custom text is stored per record, not a separate reusable list. Maintenance
+items keep their existing vehicle-specific management and completion history.
+
+History, Home recent activity and maintenance service history open read-only
+Details before an explicit Edit action. Refuel, expense, income, service and manual
+odometer details reuse existing edit forms and refresh after save. Attachments on
+Details can be opened; add/remove remain in Edit. Record IDs, validations, money
+precision, odometer warnings and maintenance/expiry relationships are preserved.
