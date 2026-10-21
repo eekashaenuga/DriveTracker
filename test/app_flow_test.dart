@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:drivetracker/app/app.dart';
+import 'package:drivetracker/core/product_identity.dart';
 import 'package:drivetracker/app/app_controller.dart';
 import 'package:drivetracker/app/theme/dt_theme.dart';
 import 'package:drivetracker/features/attachments/domain/attachment.dart';
@@ -35,7 +36,8 @@ void main() {
       find.byKey(const Key('addFirstVehicleButton')),
     );
 
-    expect(find.text('DriveTracker'), findsOneWidget);
+    expect(find.text(ProductIdentity.name), findsOneWidget);
+    expect(find.text(ProductIdentity.tagline), findsOneWidget);
     expect(find.byKey(const Key('addFirstVehicleButton')), findsOneWidget);
   });
 
@@ -508,6 +510,10 @@ void main() {
       tester,
       find.byKey(const Key('historyOdometerDetails')),
     );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('recordDetailsLoaded_${historical.id}')),
+    );
     expect(find.text('65,000 mi'), findsWidgets);
     await _tapAndPump(
       tester,
@@ -593,6 +599,10 @@ void main() {
     await _pumpUntilFound(
       tester,
       find.byKey(const Key('historyOdometerDetails')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(Key('recordDetailsLoaded_${historical.id}')),
     );
     await _tapAndPump(
       tester,
@@ -856,6 +866,9 @@ void main() {
       findsOneWidget,
     );
     await _tapAndRunAsync(tester, activityRow);
+    await _pumpUntilFound(tester, find.byKey(const Key('recordDetailsEdit')));
+    expect(find.text('Refuel details'), findsOneWidget);
+    await _tapAndPump(tester, find.byKey(const Key('recordDetailsEdit')));
     await _pumpUntilFound(tester, find.text('Edit refuel'));
 
     final totalCostField = tester.widget<TextFormField>(
@@ -1249,6 +1262,9 @@ void main() {
 
     await _scrollUntilFound(tester, serviceRow);
     await _tapAndPump(tester, serviceRow);
+    await _pumpUntilFound(tester, find.byKey(const Key('recordDetailsEdit')));
+    expect(find.text('Service details'), findsOneWidget);
+    await _tapAndPump(tester, find.byKey(const Key('recordDetailsEdit')));
     await _pumpUntilFound(tester, find.byKey(const Key('deleteServiceButton')));
     await _waitForServiceItemsLoaded(tester);
     expect(find.byKey(const Key('serviceTotalCostField')), findsOneWidget);
@@ -1558,6 +1574,10 @@ void main() {
       mimeType: 'application/pdf',
       fileSize: 4,
     );
+    await _scrollUntilFound(
+      tester,
+      find.byKey(Key('addAttachment_${document.id}')),
+    );
     await _tapAndRunAsync(
       tester,
       find.byKey(Key('addAttachment_${document.id}')),
@@ -1621,7 +1641,16 @@ void main() {
           'cat_income_rideshare',
         );
         vehicle = await services.vehicleService.addVehicle(
-          _draft('Commuter', 64000),
+          VehicleDraft(
+            name: 'Commuter',
+            make: 'Ford',
+            model: 'Focus',
+            fuelType: FuelType.petrol,
+            distanceUnit: DistanceUnit.miles,
+            currentOdometer: 64000,
+            purchasePrice: 3000,
+            purchaseDate: DateTime(2026, 9, 1),
+          ),
         );
         await services.refuelService.createRefuel(
           _refuelDraft(
@@ -1665,7 +1694,7 @@ void main() {
         );
       });
 
-      await _pumpApp(
+      final controller = await _pumpApp(
         tester,
         services,
         find.byKey(const Key('mainActionButton')),
@@ -1688,6 +1717,50 @@ void main() {
         find.descendant(
           of: find.byKey(const Key('insightsDistanceMetric')),
           matching: find.text('600 mi'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('insightsAcquisitionMetric')),
+          matching: find.text('£3000.00'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('insightsOwnershipMetric')),
+          matching: find.text('£3152.00'),
+        ),
+        findsOneWidget,
+      );
+      for (final price in <double?>[2800, null]) {
+        await tester.runAsync(
+          () => controller.updateVehicle(
+            vehicle.id,
+            VehicleDraft(
+              name: vehicle.name,
+              make: vehicle.make,
+              model: vehicle.model,
+              fuelType: vehicle.fuelType,
+              distanceUnit: vehicle.distanceUnit,
+              purchaseDate: vehicle.purchaseDate,
+              purchasePrice: price,
+            ),
+          ),
+        );
+        await _pumpUntilFound(
+          tester,
+          find.descendant(
+            of: find.byKey(const Key('insightsOwnershipMetric')),
+            matching: find.text(price == null ? '£152.00' : '£2952.00'),
+          ),
+        );
+      }
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('insightsAcquisitionMetric')),
+          matching: find.text('Not recorded in range'),
         ),
         findsOneWidget,
       );
@@ -2427,7 +2500,7 @@ Future<void> _openHistoryScreen(WidgetTester tester) async {
 
 Future<void> _openDocumentsScreen(WidgetTester tester) async {
   await _tapAndPump(tester, find.text('More').last);
-  await _pumpUntilFound(tester, find.byKey(const Key('moreDocumentsTile')));
+  await _scrollUntilFound(tester, find.byKey(const Key('moreDocumentsTile')));
   await _tapAndPump(tester, find.byKey(const Key('moreDocumentsTile')));
   await _pumpUntilFound(tester, find.byKey(const Key('documentsLoaded')));
 }
@@ -2694,7 +2767,7 @@ Future<void> _tapAndRunAsync(WidgetTester tester, Finder finder) async {
 Future<Finder> _pumpUntilHittable(
   WidgetTester tester,
   Finder finder, {
-  int attempts = 50,
+  int attempts = 200,
 }) async {
   for (var index = 0; index < attempts; index += 1) {
     final hittable = finder.hitTestable();
@@ -2726,14 +2799,18 @@ Finder _activeScrollable() {
 Future<void> _pumpUntilFound(
   WidgetTester tester,
   Finder finder, {
-  int attempts = 50,
+  int attempts = 200,
 }) async {
   for (var index = 0; index < attempts; index += 1) {
     await tester.pump(const Duration(milliseconds: 100));
     if (finder.evaluate().isNotEmpty) {
       return;
     }
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    // Database and controller refreshes use real asynchronous I/O; give them
+    // wall-clock time as well as advancing the test's fake animation clock.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
     if (finder.evaluate().isNotEmpty) {
       return;
     }
@@ -2744,7 +2821,7 @@ Future<void> _pumpUntilFound(
 Future<void> _pumpUntilGone(
   WidgetTester tester,
   Finder finder, {
-  int attempts = 50,
+  int attempts = 200,
 }) async {
   for (var index = 0; index < attempts; index += 1) {
     await tester.pump(const Duration(milliseconds: 100));

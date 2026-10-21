@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/product_identity.dart';
 import '../domain/data_safety_service.dart';
 
 enum RestoreBackupFlowResult { cancelled, confirmationCancelled, restored }
@@ -72,7 +73,7 @@ Future<bool?> showRestoreBackupConfirmation(
               ),
               const SizedBox(height: DTSpacing.sm),
               Text(
-                'DriveTracker will create a safety backup first, then replace the local data on this device.',
+                '${ProductIdentity.name} will create a safety backup first, then replace the local data on this device.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

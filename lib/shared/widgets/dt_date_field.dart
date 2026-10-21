@@ -55,7 +55,7 @@ class DTDateField extends StatelessWidget {
                 firstDate: DateTime(1900),
                 lastDate: DateTime(now.year + 20, 12, 31),
                 currentDate: DateTime(now.year, now.month, now.day),
-                initialEntryMode: DatePickerEntryMode.calendarOnly,
+                initialEntryMode: DatePickerEntryMode.calendar,
               );
               if (picked != null) {
                 onChanged(DateTime(picked.year, picked.month, picked.day));

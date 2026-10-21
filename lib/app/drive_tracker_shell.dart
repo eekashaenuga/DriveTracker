@@ -31,42 +31,42 @@ class _DriveTrackerShellState extends State<DriveTrackerShell> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: screens),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: _ActionFab(
-        onPressed: () => _showActionSheet(context),
-      ),
-      bottomNavigationBar: BottomAppBar(
-        height: 78,
-        padding: const EdgeInsets.symmetric(horizontal: DTSpacing.sm),
-        child: Row(
-          children: [
-            _NavItem(
-              icon: Icons.home_rounded,
-              label: 'Home',
-              selected: _index == 0,
-              onTap: () => _selectTab(0),
-            ),
-            _NavItem(
-              icon: Icons.insights_rounded,
-              label: 'Insights',
-              selected: _index == 1,
-              onTap: () => _selectTab(1),
-            ),
-            const SizedBox(width: 68),
-            _NavItem(
-              icon: Icons.notifications_none_rounded,
-              label: 'Reminders',
-              selected: _index == 2,
-              onTap: () => _selectTab(2),
-            ),
-            _NavItem(
-              icon: Icons.more_horiz_rounded,
-              label: 'More',
-              selected: _index == 3,
-              onTap: () => _selectTab(3),
-            ),
-          ],
-        ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index < 2 ? _index : _index + 1,
+        onDestinationSelected: (index) {
+          if (index == 2) {
+            _showActionSheet(context);
+          } else {
+            _selectTab(index < 2 ? index : index - 1);
+          }
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights_rounded),
+            label: 'Insights',
+          ),
+          NavigationDestination(
+            key: Key('mainActionButton'),
+            icon: _AddIcon(),
+            label: 'Add',
+            tooltip: 'Add entry',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.notifications_none_rounded),
+            selectedIcon: Icon(Icons.notifications_rounded),
+            label: 'Reminders',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.more_horiz_rounded),
+            label: 'More',
+          ),
+        ],
       ),
     );
   }
@@ -93,98 +93,20 @@ class _DriveTrackerShellState extends State<DriveTrackerShell> {
   }
 }
 
-class _ActionFab extends StatefulWidget {
-  const _ActionFab({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  State<_ActionFab> createState() => _ActionFabState();
-}
-
-class _ActionFabState extends State<_ActionFab> {
-  bool _pressed = false;
+class _AddIcon extends StatelessWidget {
+  const _AddIcon();
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.maybeOf(context);
-    final reduceMotion =
-        media?.disableAnimations == true || media?.accessibleNavigation == true;
-
-    return GestureDetector(
-      onTapDown: (_) => _setPressed(true),
-      onTapCancel: () => _setPressed(false),
-      onTapUp: (_) => _setPressed(false),
-      child: AnimatedScale(
-        scale: _pressed && !reduceMotion ? 0.94 : 1,
-        duration: reduceMotion ? Duration.zero : DTDurations.fast,
-        curve: Curves.easeOutCubic,
-        child: FloatingActionButton(
-          key: const Key('mainActionButton'),
-          onPressed: widget.onPressed,
-          tooltip: 'Add entry',
-          child: const Icon(Icons.add_rounded),
-        ),
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: DTRadii.cardRadius,
       ),
-    );
-  }
-
-  void _setPressed(bool pressed) {
-    if (_pressed == pressed || !mounted) {
-      return;
-    }
-    setState(() => _pressed = pressed);
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = selected
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurfaceVariant;
-
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: label,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(DTRadii.card),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: DTSpacing.sm),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: color),
-                const SizedBox(height: DTSpacing.xs),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+        child: Icon(Icons.add_rounded, color: colors.onPrimaryContainer),
       ),
     );
   }
@@ -271,11 +193,8 @@ class _ActionSheet extends StatelessWidget {
                   color: theme.colorScheme.primary,
                 ),
                 const SizedBox(width: DTSpacing.sm),
-                Text(
-                  'Add entry',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                Expanded(
+                  child: Text('Add entry', style: theme.textTheme.titleLarge),
                 ),
               ],
             ),
@@ -289,7 +208,11 @@ class _ActionSheet extends StatelessWidget {
             const SizedBox(height: DTSpacing.md),
             LayoutBuilder(
               builder: (context, constraints) {
-                final columns = constraints.maxWidth >= 280 ? 2 : 1;
+                final columns =
+                    constraints.maxWidth >= 280 &&
+                        MediaQuery.textScalerOf(context).scale(14) <= 20
+                    ? 2
+                    : 1;
                 final spacing = columns == 1 ? 0.0 : DTSpacing.md;
                 final tileWidth =
                     (constraints.maxWidth - spacing * (columns - 1)) / columns;
@@ -353,7 +276,7 @@ class _ActionTile extends StatelessWidget {
       label: item.title,
       child: Material(
         key: item.key,
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.46),
+        color: colors.surfaceContainer,
         borderRadius: DTRadii.cardRadius,
         child: InkWell(
           borderRadius: DTRadii.cardRadius,
@@ -387,14 +310,12 @@ class _ActionTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: DTSpacing.xs),
                   Text(
                     item.subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colors.onSurfaceVariant,
                     ),

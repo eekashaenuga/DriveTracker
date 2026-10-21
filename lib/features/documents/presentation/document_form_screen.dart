@@ -6,6 +6,8 @@ import '../../../app/theme/dt_tokens.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_date_field.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
+import '../../../shared/widgets/date_reminder_editor.dart';
+import '../../reminders/domain/date_reminder_schedule.dart';
 import '../../attachments/domain/attachment.dart';
 import '../../attachments/presentation/attachment_panel.dart';
 import '../../vehicles/domain/vehicle.dart';
@@ -33,6 +35,7 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
   String? _vehicleId;
   DateTime? _issueDate;
   DateTime? _expiryDate;
+  DateReminderSchedule? _schedule;
   String? _formError;
   bool _didDefaultFromController = false;
 
@@ -45,6 +48,7 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
     super.initState();
     final document = _source;
     _vehicleId = document?.vehicleId;
+    _schedule = document?.reminderSchedule;
     _categoryController.text =
         document?.category ?? defaultDocumentCategories.first;
     _titleController.text = document?.title ?? '';
@@ -111,6 +115,7 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
             padding: const EdgeInsets.all(DTSpacing.lg),
             children: [
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 key: const Key('documentVehicleField'),
                 initialValue: selectedVehicle?.id,
                 decoration: const InputDecoration(labelText: 'Vehicle'),
@@ -118,7 +123,11 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
                   for (final vehicle in vehicles)
                     DropdownMenuItem(
                       value: vehicle.id,
-                      child: Text(vehicle.name),
+                      child: Text(
+                        vehicle.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
                 validator: (value) =>
@@ -144,8 +153,14 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
                       key: Key('documentCategoryChip_$category'),
                       label: Text(category),
                       selected: _categoryController.text == category,
-                      onSelected: (_) =>
-                          setState(() => _categoryController.text = category),
+                      onSelected: (_) => setState(() {
+                        _categoryController.text = category;
+                        if (!_isEditing) {
+                          _schedule = category == 'MOT'
+                              ? DateReminderSchedule.mot
+                              : DateReminderSchedule.standard;
+                        }
+                      }),
                     ),
                 ],
               ),
@@ -192,6 +207,14 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
                 onChanged: (value) => setState(() => _expiryDate = value),
               ),
               const SizedBox(height: DTSpacing.lg),
+              if (_expiryDate != null) ...[
+                DateReminderEditor(
+                  value: _schedule ?? DateReminderSchedule.standard,
+                  showMotPreset: _categoryController.text == 'MOT',
+                  onChanged: (value) => setState(() => _schedule = value),
+                ),
+                const SizedBox(height: DTSpacing.lg),
+              ],
               Text(
                 'Optional details',
                 style: theme.textTheme.titleMedium?.copyWith(
@@ -278,6 +301,7 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
       provider: _providerController.text,
       referenceNumber: _referenceController.text,
       notes: _notesController.text,
+      reminderSchedule: _schedule,
     );
     try {
       final controller = context.read<DriveTrackerController>();

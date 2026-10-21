@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../app/app_controller.dart';
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/product_identity.dart';
 import '../../../shared/widgets/dt_date_field.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
 import '../../attachments/domain/attachment.dart';
@@ -172,7 +173,7 @@ class _DocumentDetailsScreenState extends State<DocumentDetailsScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete document permanently?'),
         content: Text(
-          'This removes ${document.title} and its managed attachment files from DriveTracker.',
+          'This removes ${document.title} and its managed attachment files from ${ProductIdentity.name}.',
         ),
         actions: [
           TextButton(
@@ -249,7 +250,7 @@ class _DocumentHeader extends StatelessWidget {
                         document.category,
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: colors.onSurfaceVariant,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       Text(
@@ -257,7 +258,7 @@ class _DocumentHeader extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -318,6 +319,13 @@ class _DetailsSection extends StatelessWidget {
         _DetailRow(label: 'Provider', value: document.provider),
         _DetailRow(label: 'Reference', value: document.referenceNumber),
         _DetailRow(label: 'Notes', value: document.notes),
+        if (document.expiryDate != null)
+          _DetailRow(
+            label: 'Date reminders',
+            value:
+                document.reminderSchedule?.summary ??
+                '30 days before (existing schedule)',
+          ),
         _DetailRow(label: 'Created', value: compactDate(document.createdAt)),
         _DetailRow(label: 'Updated', value: compactDate(document.updatedAt)),
       ],
@@ -343,24 +351,40 @@ class _DetailRow extends StatelessWidget {
     }
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final labelWidget = Text(
+      label,
+      style: theme.textTheme.labelLarge?.copyWith(
+        color: colors.onSurfaceVariant,
+      ),
+    );
+    final valueWidget = SelectableText(
+      valueText,
+      style: theme.textTheme.bodyLarge,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: DTSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 116,
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: DTSpacing.md),
-          Expanded(child: Text(valueText)),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 340 ||
+              MediaQuery.textScalerOf(context).scale(14) > 20) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                labelWidget,
+                const SizedBox(height: DTSpacing.xs),
+                valueWidget,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 116, child: labelWidget),
+              const SizedBox(width: DTSpacing.md),
+              Expanded(child: valueWidget),
+            ],
+          );
+        },
       ),
     );
   }

@@ -20,6 +20,8 @@ val hasReleaseSigningConfig = requiredSigningKeys.all {
 val requestedReleaseBuild = gradle.startParameter.taskNames.any {
     it.contains("Release", ignoreCase = true)
 }
+val publishedApplicationId = "com.eekashaenuga.drivetracker"
+val v1_0_0VersionCode = 1
 
 android {
     namespace = "com.eekashaenuga.drivetracker"
@@ -33,8 +35,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.eekashaenuga.drivetracker"
+        // Keep this identical to the v1.0.0 package so Android upgrades preserve app data.
+        applicationId = publishedApplicationId
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -45,6 +47,12 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        if (flutter.versionCode <= v1_0_0VersionCode) {
+            throw GradleException(
+                "Android versionCode must be greater than v1.0.0's code " +
+                    "($v1_0_0VersionCode) so installed apps can upgrade in place."
+            )
+        }
     }
 
     signingConfigs {

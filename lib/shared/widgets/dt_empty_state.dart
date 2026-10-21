@@ -34,7 +34,7 @@ class DTEmptyState extends StatelessWidget {
                 title,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: DTSpacing.sm),

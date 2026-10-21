@@ -3,15 +3,288 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 class DatabaseMigrations {
   const DatabaseMigrations._();
 
-  static const schemaVersion = 4;
+  static const schemaVersion = 5;
+
+  static const _allTables = [
+    'vehicles',
+    'odometer_entries',
+    'app_settings',
+    'record_categories',
+    'refuels',
+    'expenses',
+    'income_records',
+    'maintenance_items',
+    'services',
+    'service_items',
+    'documents',
+    'attachments',
+  ];
+
+  static const _requiredColumnsByTable = <String, List<String>>{
+    'vehicles': [
+      'id',
+      'name',
+      'make',
+      'model',
+      'year',
+      'registration',
+      'fuel_type',
+      'distance_unit',
+      'photo_path',
+      'trim',
+      'engine',
+      'transmission',
+      'vin',
+      'colour',
+      'purchase_date',
+      'purchase_mileage',
+      'purchase_price',
+      'seller',
+      'notes',
+      'is_archived',
+      'created_at',
+      'updated_at',
+    ],
+    'odometer_entries': [
+      'id',
+      'vehicle_id',
+      'odometer',
+      'event_datetime',
+      'source_type',
+      'source_record_id',
+      'created_at',
+      'updated_at',
+    ],
+    'app_settings': ['key', 'value', 'updated_at'],
+    'record_categories': [
+      'id',
+      'type',
+      'name',
+      'icon_identifier',
+      'sort_order',
+      'system_category',
+      'is_archived',
+      'created_at',
+      'updated_at',
+    ],
+    'refuels': [
+      'id',
+      'vehicle_id',
+      'event_datetime',
+      'odometer',
+      'fuel_type',
+      'total_cost_minor',
+      'volume_millilitres',
+      'unit_price_micros_per_litre',
+      'is_full_tank',
+      'missed_previous_refuel',
+      'station',
+      'notes',
+      'created_at',
+      'updated_at',
+    ],
+    'expenses': [
+      'id',
+      'vehicle_id',
+      'category_id',
+      'event_datetime',
+      'odometer',
+      'amount_minor',
+      'merchant',
+      'payment_method',
+      'notes',
+      'created_at',
+      'updated_at',
+    ],
+    'income_records': [
+      'id',
+      'vehicle_id',
+      'category_id',
+      'event_datetime',
+      'odometer',
+      'amount_minor',
+      'source',
+      'notes',
+      'created_at',
+      'updated_at',
+    ],
+    'maintenance_items': [
+      'id',
+      'vehicle_id',
+      'name',
+      'category',
+      'mileage_interval',
+      'time_interval_days',
+      'mileage_warning',
+      'date_warning_days',
+      'reminder_enabled',
+      'is_archived',
+      'created_at',
+      'updated_at',
+    ],
+    'services': [
+      'id',
+      'vehicle_id',
+      'event_datetime',
+      'odometer',
+      'total_cost_minor',
+      'garage',
+      'notes',
+      'is_baseline',
+      'created_at',
+      'updated_at',
+    ],
+    'service_items': [
+      'id',
+      'service_id',
+      'maintenance_item_id',
+      'item_name',
+      'allocated_cost_minor',
+      'notes',
+      'created_at',
+      'updated_at',
+    ],
+    'documents': [
+      'id',
+      'vehicle_id',
+      'category',
+      'title',
+      'issue_date',
+      'expiry_date',
+      'reference_number',
+      'provider',
+      'notes',
+      'reminder_id',
+      'is_archived',
+      'archived_at',
+      'created_at',
+      'updated_at',
+    ],
+    'attachments': [
+      'id',
+      'parent_type',
+      'parent_id',
+      'file_name',
+      'stored_path',
+      'mime_type',
+      'file_size',
+      'created_at',
+      'updated_at',
+    ],
+  };
+
+  static const _allIndexes = [
+    'idx_vehicles_archived',
+    'idx_odometer_vehicle_reading',
+    'idx_odometer_vehicle_event',
+    'idx_odometer_source_record',
+    'idx_categories_type_archived',
+    'idx_refuels_vehicle_event',
+    'idx_refuels_vehicle_odometer',
+    'idx_expenses_vehicle_event',
+    'idx_expenses_category',
+    'idx_income_vehicle_event',
+    'idx_income_category',
+    'idx_maintenance_items_vehicle_active',
+    'idx_maintenance_items_active_name',
+    'idx_services_vehicle_event',
+    'idx_services_vehicle_odometer',
+    'idx_service_items_service',
+    'idx_service_items_maintenance_item',
+    'idx_documents_vehicle_active_expiry',
+    'idx_documents_vehicle_category',
+    'idx_attachments_parent',
+    'idx_attachments_stored_path',
+  ];
+
+  static List<String> requiredTablesFor(int version) {
+    _checkSupportedVersion(version);
+    if (version >= 4) {
+      return _allTables;
+    }
+    if (version == 3) {
+      return _allTables.take(10).toList();
+    }
+    if (version == 2) {
+      return _allTables.take(7).toList();
+    }
+    return _allTables.take(3).toList();
+  }
+
+  static List<String> requiredIndexesFor(int version) {
+    _checkSupportedVersion(version);
+    if (version >= 4) {
+      return _allIndexes;
+    }
+    if (version == 3) {
+      return _allIndexes.take(17).toList();
+    }
+    if (version == 2) {
+      return _allIndexes.take(11).toList();
+    }
+    return _allIndexes.take(3).toList();
+  }
+
+  static Future<int> readSchemaVersion(sqflite.DatabaseExecutor db) async {
+    final rows = await db.rawQuery('PRAGMA user_version');
+    if (rows.isEmpty) {
+      throw StateError('SQLite schema version could not be read.');
+    }
+    final value = rows.first.values.first;
+    if (value is! int) {
+      throw StateError('SQLite schema version is invalid.');
+    }
+    return value;
+  }
+
+  static Future<int> validateSchema(
+    sqflite.DatabaseExecutor db, {
+    int? expectedVersion,
+  }) async {
+    final version = await readSchemaVersion(db);
+    if (expectedVersion != null && version != expectedVersion) {
+      throw StateError(
+        'SQLite schema version $version does not match expected version '
+        '$expectedVersion.',
+      );
+    }
+    _checkSupportedVersion(version);
+
+    final tableRows = await db.query(
+      'sqlite_master',
+      columns: ['name'],
+      where: 'type = ?',
+      whereArgs: ['table'],
+    );
+    final tableNames = tableRows.map((row) => row['name'] as String).toSet();
+    for (final table in requiredTablesFor(version)) {
+      if (!tableNames.contains(table)) {
+        throw StateError('SQLite schema is missing table "$table".');
+      }
+      await _validateColumns(db, table, version);
+    }
+
+    final indexRows = await db.query(
+      'sqlite_master',
+      columns: ['name'],
+      where: 'type = ?',
+      whereArgs: ['index'],
+    );
+    final indexNames = indexRows.map((row) => row['name'] as String).toSet();
+    for (final index in requiredIndexesFor(version)) {
+      if (!indexNames.contains(index)) {
+        throw StateError('SQLite schema is missing index "$index".');
+      }
+    }
+
+    return version;
+  }
 
   static Future<void> createSchema(
     sqflite.DatabaseExecutor db,
     int version,
   ) async {
-    if (version < 1 || version > schemaVersion) {
-      throw StateError('Unsupported schema version $version.');
-    }
+    _checkSupportedVersion(version);
 
     await _createV1(db);
     if (version >= 2) {
@@ -22,6 +295,9 @@ class DatabaseMigrations {
     }
     if (version >= 4) {
       await _createV4(db);
+    }
+    if (version >= 5) {
+      await _createV5(db);
     }
   }
 
@@ -40,6 +316,9 @@ class DatabaseMigrations {
           break;
         case 4:
           await _createV4(db);
+          break;
+        case 5:
+          await _createV5(db);
           break;
         default:
           throw StateError(
@@ -415,5 +694,63 @@ class DatabaseMigrations {
       CREATE UNIQUE INDEX idx_attachments_stored_path
       ON attachments (stored_path)
     ''');
+  }
+
+  static Future<void> _createV5(sqflite.DatabaseExecutor db) async {
+    await db.execute(
+      "ALTER TABLE maintenance_items ADD COLUMN record_kind TEXT NOT NULL DEFAULT 'scheduled' CHECK (record_kind IN ('scheduled', 'expiry'))",
+    );
+    await db.execute(
+      'ALTER TABLE maintenance_items ADD COLUMN expiry_date TEXT',
+    );
+    await db.execute('ALTER TABLE maintenance_items ADD COLUMN notes TEXT');
+    await db.execute(
+      'ALTER TABLE maintenance_items ADD COLUMN reminder_schedule TEXT',
+    );
+    await db.execute('ALTER TABLE documents ADD COLUMN reminder_schedule TEXT');
+    // Keep the existing index contract, but scope names to the two distinct
+    // record types. No records or linked service history are modified.
+    await db.execute('DROP INDEX idx_maintenance_items_active_name');
+    await db.execute(
+      "CREATE UNIQUE INDEX idx_maintenance_items_active_name ON maintenance_items (vehicle_id, record_kind, name COLLATE NOCASE) WHERE is_archived = 0",
+    );
+  }
+
+  static Future<void> _validateColumns(
+    sqflite.DatabaseExecutor db,
+    String table,
+    int version,
+  ) async {
+    final baseColumns = _requiredColumnsByTable[table];
+    final expectedColumns = baseColumns == null
+        ? null
+        : [
+            ...baseColumns,
+            if (version >= 5 && table == 'maintenance_items') ...[
+              'record_kind',
+              'expiry_date',
+              'notes',
+              'reminder_schedule',
+            ],
+            if (version >= 5 && table == 'documents') 'reminder_schedule',
+          ];
+    if (expectedColumns == null) {
+      throw StateError('No schema column contract registered for "$table".');
+    }
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final actualColumns = info.map((row) => row['name'] as String).toSet();
+    for (final column in expectedColumns) {
+      if (!actualColumns.contains(column)) {
+        throw StateError(
+          'SQLite schema table "$table" is missing column "$column".',
+        );
+      }
+    }
+  }
+
+  static void _checkSupportedVersion(int version) {
+    if (version < 1 || version > schemaVersion) {
+      throw StateError('Unsupported schema version $version.');
+    }
   }
 }

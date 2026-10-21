@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drivetracker/app/app_controller.dart';
@@ -49,8 +50,11 @@ void main() {
           ),
         );
         expect(request.scheduledAt, DateTime(2026, 9, 1, 9));
-        expect(request.title, 'DriveTracker');
-        expect(request.body, 'Ford Fiesta - MOT due on 1 Oct 2026');
+        expect(request.title, 'MOT due in 30 days');
+        expect(
+          request.body,
+          'Ford Fiesta: MOT is due on 1 Oct 2026. Arrange the required maintenance.',
+        );
         expect(client.pendingNotificationIds(), completion([request.id]));
       },
     );
@@ -144,7 +148,10 @@ void main() {
         expect(client.cancelled, contains(oldRequest.id));
         expect(newRequest.id, oldRequest.id);
         expect(newRequest.scheduledAt, DateTime(2027, 8, 11, 9));
-        expect(newRequest.body, 'Commuter - MOT due on 10 Sep 2027');
+        expect(
+          newRequest.body,
+          'Commuter: MOT is due on 10 Sep 2027. Arrange the required maintenance.',
+        );
       },
     );
 
@@ -219,17 +226,24 @@ void main() {
 
       final result = await scheduler.reconcile(enabled: true);
 
-      expect(result.scheduled.map((request) => request.stableId), [
-        'document_date_${insurance.id}',
-        'document_date_${mot.id}',
-      ]);
+      expect(result.scheduled.first.stableId, 'document_date_${insurance.id}');
+      final motRequests = result.scheduled
+          .where((r) => r.payload == 'document_date_${mot.id}')
+          .toList();
+      expect(motRequests, hasLength(10));
+      expect(motRequests.map((r) => r.id).toSet(), hasLength(10));
       expect(
         result.scheduled.first.body,
-        'Ford Fiesta - Insurance expires on 1 Oct 2026',
+        'Ford Fiesta: Insurance expires on 1 Oct 2026. Review and renew this record.',
       );
       expect(
-        result.scheduled.last.body,
-        'Honda Civic - MOT expires on 2 Oct 2026',
+        motRequests.first.body,
+        'Your Honda Civic MOT expires on 2 Oct 2026. Arrange a test before it expires.',
+      );
+      expect(motRequests.last.title, 'MOT expires today');
+      expect(
+        motRequests.last.body,
+        'Your Honda Civic MOT expires today. Arrange a test before normal use continues.',
       );
       expect(result.scheduled.first.body, isNot(contains('Policy ABC123')));
       expect(result.scheduled.last.body, isNot(contains('Certificate ZX9')));
@@ -407,32 +421,90 @@ void main() {
   });
 
   group('DriveTrackerController notifications', () {
-    test('startup reconciles stored notification preference', () async {
+    test(
+      'startup reconciles stored notification preference after first load',
+      () async {
+        final services = createTestServices();
+        final vehicle = await _addVehicle(services);
+        final item = await _addDateMaintenanceItem(services, vehicle);
+        await _completeItem(
+          services,
+          vehicle: vehicle,
+          item: item,
+          eventDateTime: DateTime(2025, 10, 1, 12),
+          odometer: 70000,
+          isBaseline: true,
+        );
+        await services.settings.setLocalReminderNotificationsEnabled(true);
+        final permissionStatusBlocker = Completer<void>();
+        final initializeBlocker = Completer<void>();
+        final client = FakeLocalNotificationClient()
+          ..permissionStatusBlocker = permissionStatusBlocker
+          ..initializeBlocker = initializeBlocker;
+        final controller = DriveTrackerController(
+          database: services.database,
+          notificationClient: client,
+          clock: () => DateTime(2026, 9, 1, 8),
+        );
+        addTearDown(controller.dispose);
+
+        await controller.initialize();
+
+        expect(controller.initialized, isTrue);
+        expect(controller.localReminderNotificationsPreferred, isTrue);
+        expect(client.scheduled, isEmpty);
+
+        permissionStatusBlocker.complete();
+        initializeBlocker.complete();
+        await client.firstSchedule.future.timeout(const Duration(seconds: 10));
+        await pumpEventQueue(times: 20);
+
+        expect(controller.localReminderNotificationsEnabled, isTrue);
+        expect(client.scheduled, hasLength(1));
+        expect(client.scheduled.single.stableId, 'maintenance_date_${item.id}');
+      },
+    );
+
+    test('disposed controller stops deferred startup reconciliation', () async {
       final services = createTestServices();
-      final vehicle = await _addVehicle(services);
-      final item = await _addDateMaintenanceItem(services, vehicle);
-      await _completeItem(
-        services,
-        vehicle: vehicle,
-        item: item,
-        eventDateTime: DateTime(2025, 10, 1, 12),
-        odometer: 70000,
-        isBaseline: true,
-      );
-      await services.settings.setLocalReminderNotificationsEnabled(true);
-      final client = FakeLocalNotificationClient();
+      final blocker = Completer<void>();
+      final client = FakeLocalNotificationClient()
+        ..permissionStatusBlocker = blocker;
       final controller = DriveTrackerController(
         database: services.database,
         notificationClient: client,
-        clock: () => DateTime(2026, 9, 1, 8),
+      );
+      await controller.initialize();
+      controller.dispose();
+      blocker.complete();
+      await pumpEventQueue(times: 20);
+      expect(client.initializeCount, 0);
+      expect(client.scheduled, isEmpty);
+    });
+
+    test('startup and preference changes reconcile serially', () async {
+      final services = createTestServices();
+      final blocker = Completer<void>();
+      final client = FakeLocalNotificationClient()..initializeBlocker = blocker;
+      final controller = DriveTrackerController(
+        database: services.database,
+        notificationClient: client,
       );
       addTearDown(controller.dispose);
-
       await controller.initialize();
-
-      expect(controller.localReminderNotificationsEnabled, isTrue);
-      expect(client.scheduled, hasLength(1));
-      expect(client.scheduled.single.stableId, 'maintenance_date_${item.id}');
+      await pumpEventQueue(times: 20);
+      expect(client.initializeCount, 1);
+      final change = controller.setLocalReminderNotificationsEnabled(false);
+      await pumpEventQueue(times: 20);
+      expect(client.initializeCount, 1);
+      blocker.complete();
+      await change;
+      await pumpEventQueue(times: 20);
+      expect(client.initializeCount, 2);
+      expect(
+        await services.settings.getLocalReminderNotificationsEnabled(),
+        isFalse,
+      );
     });
 
     test('permission denial does not enable notification preference', () async {
@@ -512,7 +584,7 @@ void main() {
       expect(client.scheduled.single.stableId, 'maintenance_date_${item.id}');
       expect(
         client.scheduled.single.body,
-        'Restored Fiesta - MOT due on 1 Oct 2026',
+        'Restored Fiesta: MOT is due on 1 Oct 2026. Arrange the required maintenance.',
       );
     });
   });
@@ -616,7 +688,10 @@ class FakeLocalNotificationClient implements LocalNotificationClient {
       LocalNotificationPermissionStatus.granted;
   final pending = <int, LocalNotificationRequest?>{};
   final scheduled = <LocalNotificationRequest>[];
+  final firstSchedule = Completer<void>();
   final cancelled = <int>[];
+  Completer<void>? initializeBlocker;
+  Completer<void>? permissionStatusBlocker;
   var initializeCount = 0;
 
   @override
@@ -625,10 +700,12 @@ class FakeLocalNotificationClient implements LocalNotificationClient {
   @override
   Future<void> initialize() async {
     initializeCount += 1;
+    await initializeBlocker?.future;
   }
 
   @override
   Future<LocalNotificationPermissionStatus> permissionStatus() async {
+    await permissionStatusBlocker?.future;
     return permission;
   }
 
@@ -646,6 +723,9 @@ class FakeLocalNotificationClient implements LocalNotificationClient {
   Future<void> schedule(LocalNotificationRequest request) async {
     scheduled.add(request);
     pending[request.id] = request;
+    if (!firstSchedule.isCompleted) {
+      firstSchedule.complete();
+    }
   }
 
   @override

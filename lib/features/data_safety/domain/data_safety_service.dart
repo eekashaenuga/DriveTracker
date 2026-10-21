@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_migrations.dart';
+import '../../../core/product_identity.dart';
 import '../../attachments/domain/attachment_io.dart';
 import 'backup_manifest.dart';
 
@@ -205,21 +206,6 @@ class DataSafetyService {
   static const manifestPath = 'manifest.json';
   static const databaseArchivePath = 'database.sqlite';
   static const attachmentsRoot = 'attachments';
-
-  static const _allTables = [
-    'vehicles',
-    'odometer_entries',
-    'app_settings',
-    'record_categories',
-    'refuels',
-    'expenses',
-    'income_records',
-    'maintenance_items',
-    'services',
-    'service_items',
-    'documents',
-    'attachments',
-  ];
 
   final AppDatabase database;
   final AttachmentStorage attachmentStorage;
@@ -518,7 +504,7 @@ class DataSafetyService {
         ..add(
           ArchiveFile.string(
             'README.txt',
-            'DriveTracker CSV export\n'
+            '${ProductIdentity.csvExportTitle}\n'
                 'Created: ${now.toIso8601String()}\n'
                 'Schema version: $schemaVersion\n',
           ),
@@ -828,7 +814,7 @@ class DataSafetyService {
       );
       if (archive.isEmpty) {
         throw const DataSafetyException(
-          'Backup file is not a valid DriveTracker backup.',
+          'Backup file is not a valid ${ProductIdentity.name} backup.',
         );
       }
       if (duplicateNames.isNotEmpty) {
@@ -853,7 +839,7 @@ class DataSafetyService {
       rethrow;
     } catch (_) {
       throw const DataSafetyException(
-        'Backup file is not a valid DriveTracker backup.',
+        'Backup file is not a valid ${ProductIdentity.name} backup.',
       );
     }
   }
@@ -889,18 +875,13 @@ class DataSafetyService {
         'Backup schema version $schemaVersion is not supported.',
       );
     }
-    final requiredTables = _requiredTablesFor(schemaVersion);
-    final rows = await db.query(
-      'sqlite_master',
-      columns: ['name'],
-      where: 'type = ?',
-      whereArgs: ['table'],
-    );
-    final tableNames = rows.map((row) => row['name'] as String).toSet();
-    for (final table in requiredTables) {
-      if (!tableNames.contains(table)) {
-        throw DataSafetyException('Backup database is missing table "$table".');
-      }
+    try {
+      await DatabaseMigrations.validateSchema(
+        db,
+        expectedVersion: schemaVersion,
+      );
+    } on StateError {
+      throw const DataSafetyException('Backup database schema is incomplete.');
     }
     final integrityRows = await db.rawQuery('PRAGMA integrity_check');
     final integrity = integrityRows.isEmpty
@@ -957,16 +938,7 @@ class DataSafetyService {
   }
 
   List<String> _requiredTablesFor(int schemaVersion) {
-    if (schemaVersion >= 4) {
-      return _allTables;
-    }
-    if (schemaVersion == 3) {
-      return _allTables.take(10).toList();
-    }
-    if (schemaVersion == 2) {
-      return _allTables.take(7).toList();
-    }
-    return _allTables.take(3).toList();
+    return DatabaseMigrations.requiredTablesFor(schemaVersion);
   }
 
   Future<List<String>> _columnsFor(

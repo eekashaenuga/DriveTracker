@@ -4,23 +4,29 @@ Future<String?> showCategoryNameDialog(
   BuildContext context, {
   required String title,
   required Iterable<String> existingNames,
+  String? initialName,
 }) {
   return showDialog<String>(
     context: context,
-    builder: (context) =>
-        _CategoryNameDialog(title: title, existingNames: existingNames),
+    builder: (context) => _CategoryNameDialog(
+      title: title,
+      existingNames: existingNames,
+      initialName: initialName,
+    ),
   );
 }
 
 class _CategoryNameDialog extends StatefulWidget {
   _CategoryNameDialog({
     required this.title,
+    this.initialName,
     required Iterable<String> existingNames,
   }) : normalizedExistingNames = existingNames
            .map(_normalizeCategoryName)
            .toSet();
 
   final String title;
+  final String? initialName;
   final Set<String> normalizedExistingNames;
 
   @override
@@ -34,7 +40,7 @@ class _CategoryNameDialogState extends State<_CategoryNameDialog> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController();
+    _controller = TextEditingController(text: widget.initialName);
   }
 
   @override
@@ -46,6 +52,7 @@ class _CategoryNameDialogState extends State<_CategoryNameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      scrollable: true,
       title: Text(widget.title),
       content: Form(
         key: _formKey,
@@ -68,7 +75,7 @@ class _CategoryNameDialogState extends State<_CategoryNameDialog> {
         FilledButton(
           key: const Key('addCategoryButton'),
           onPressed: _submit,
-          child: const Text('Add'),
+          child: Text(widget.initialName == null ? 'Add' : 'Save'),
         ),
       ],
     );

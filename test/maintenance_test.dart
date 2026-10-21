@@ -56,7 +56,7 @@ void main() {
       addTearDown(database.close);
       final db = await database.database;
 
-      expect(await db.getVersion(), 4);
+      expect(await db.getVersion(), DatabaseMigrations.schemaVersion);
       expect((await db.query('vehicles')).single['id'], 'veh_1');
       expect((await db.query('odometer_entries')).single['id'], 'odo_1');
       expect((await db.query('refuels')).single['id'], 'refuel_1');
@@ -224,36 +224,33 @@ void main() {
       expect(mileageDriven.primaryBasis, MaintenanceReminderBasis.mileage);
     });
 
-    test(
-      'disabled, archived and interval-free items are not active reminders',
-      () {
-        final disabled = engine.evaluate(
-          item: _item(mileageInterval: 8000, reminderEnabled: false),
-          completions: [_completion(odometer: 65000)],
-          currentOdometer: 73000,
-          asOf: asOf,
-        );
-        final archived = engine.evaluate(
-          item: _item(mileageInterval: 8000, isArchived: true),
-          completions: [_completion(odometer: 65000)],
-          currentOdometer: 73000,
-          asOf: asOf,
-        );
-        final noInterval = engine.evaluate(
-          item: _item(),
-          completions: [_completion(odometer: 65000)],
-          currentOdometer: 73000,
-          asOf: asOf,
-        );
+    test('disabled and archived items stay inactive; interval-free items need setup', () {
+      final disabled = engine.evaluate(
+        item: _item(mileageInterval: 8000, reminderEnabled: false),
+        completions: [_completion(odometer: 65000)],
+        currentOdometer: 73000,
+        asOf: asOf,
+      );
+      final archived = engine.evaluate(
+        item: _item(mileageInterval: 8000, isArchived: true),
+        completions: [_completion(odometer: 65000)],
+        currentOdometer: 73000,
+        asOf: asOf,
+      );
+      final noInterval = engine.evaluate(
+        item: _item(),
+        completions: [_completion(odometer: 65000)],
+        currentOdometer: 73000,
+        asOf: asOf,
+      );
 
-        expect(disabled.shouldShowAsReminder, isFalse);
-        expect(archived.shouldShowAsReminder, isFalse);
-        expect(noInterval.shouldShowAsReminder, isFalse);
-        expect(disabled.state, MaintenanceReminderState.normal);
-        expect(archived.state, MaintenanceReminderState.normal);
-        expect(noInterval.state, MaintenanceReminderState.normal);
-      },
-    );
+      expect(disabled.shouldShowAsReminder, isFalse);
+      expect(archived.shouldShowAsReminder, isFalse);
+      expect(noInterval.shouldShowAsReminder, isTrue);
+      expect(disabled.state, MaintenanceReminderState.due);
+      expect(archived.state, MaintenanceReminderState.setupNeeded);
+      expect(noInterval.state, MaintenanceReminderState.setupNeeded);
+    });
   });
 
   group('maintenance services', () {

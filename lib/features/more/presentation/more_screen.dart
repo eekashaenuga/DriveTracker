@@ -23,7 +23,7 @@ class MoreScreen extends StatelessWidget {
             Text(
               'More',
               style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.w900),
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: DTSpacing.xs),
             Text(
@@ -40,15 +40,10 @@ class MoreScreen extends StatelessWidget {
               accent: DTAccents.odometer,
               onTap: () => AppNavigation.openVehicles(context),
             ),
-            const DTSectionHeader(title: 'Records'),
-            _MoreTile(
-              icon: Icons.history_rounded,
-              title: 'History',
-              subtitle: 'Fuel, expense, income, service and odometer records',
-              accent: DTAccents.neutral,
-              onTap: () => AppNavigation.openHistory(context),
+            const DTSectionHeader(
+              key: Key('moreMaintenanceSection'),
+              title: 'Maintenance',
             ),
-            const SizedBox(height: DTSpacing.sm),
             _MoreTile(
               key: const Key('moreMaintenanceTile'),
               icon: Icons.handyman_rounded,
@@ -56,6 +51,14 @@ class MoreScreen extends StatelessWidget {
               subtitle: 'Service intervals and item history',
               accent: DTAccents.maintenance,
               onTap: () => AppNavigation.openMaintenance(context),
+            ),
+            const DTSectionHeader(title: 'Records'),
+            _MoreTile(
+              icon: Icons.history_rounded,
+              title: 'History',
+              subtitle: 'Fuel, expense, income, service and odometer records',
+              accent: DTAccents.neutral,
+              onTap: () => AppNavigation.openHistory(context),
             ),
             const SizedBox(height: DTSpacing.sm),
             _MoreTile(

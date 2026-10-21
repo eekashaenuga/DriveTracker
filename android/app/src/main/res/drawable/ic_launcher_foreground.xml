@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Raster export derived deterministically from the approved Vehnora master. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/vehnora_launcher_foreground" android:gravity="fill" />

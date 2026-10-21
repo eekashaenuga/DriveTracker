@@ -1,3 +1,4 @@
+import '../../../core/calculations/cost_per_distance.dart';
 import '../../../core/utilities/money.dart';
 import '../../daily_records/domain/fuel_economy_calculator.dart';
 import '../../vehicles/domain/vehicle.dart';
@@ -334,7 +335,14 @@ class FuelCalculator {
     return TripCostResult(
       fuelLitres: requiredFuel,
       estimatedCostMinor: costMinor,
-      costMinorPerDistance: costMinor / input.distance,
+      costMinorPerDistance: CostPerDistance.calculate(
+        costMinor:
+            requiredFuel *
+            input.fuelPriceMicrosPerLitre *
+            MoneyAmount.defaultCurrency.minorScale /
+            FuelNumbers.microsPerMajorUnit,
+        distance: input.distance,
+      )!,
     );
   }
 

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/calculations/analytics_date_range.dart';
 import '../core/database/app_database.dart';
 import '../core/notifications/local_notification_service.dart';
+import '../core/product_identity.dart';
 import '../core/utilities/validation_exception.dart';
 import '../features/attachments/data/attachment_repository.dart';
 import '../features/attachments/domain/attachment.dart';
@@ -84,6 +87,7 @@ class DriveTrackerController extends ChangeNotifier {
       serviceRecordRepository: _serviceRecordRepository,
     );
     _homeRepository = HomeRepository(
+      documentRepository: _documentRepository,
       vehicleRepository: _vehicleRepository,
       odometerRepository: _odometerRepository,
       refuelRepository: _refuelRepository,
@@ -207,6 +211,9 @@ class DriveTrackerController extends ChangeNotifier {
   late final ReminderNotificationScheduler _notificationScheduler;
 
   bool _initialized = false;
+  bool _disposed = false;
+  bool _postStartupNotificationSyncStarted = false;
+  Future<void> _notificationReconciliation = Future<void>.value();
   bool _busy = false;
   String? _errorMessage;
   ThemeMode _themeMode = ThemeMode.system;
@@ -273,6 +280,11 @@ class DriveTrackerController extends ChangeNotifier {
     return List.unmodifiable(_dashboard?.recentActivity ?? const []);
   }
 
+  bool get showDocumentAttention => _dashboard?.showDocumentAttention ?? false;
+
+  DocumentExpiryReminder? get nextDocumentAttention =>
+      _dashboard?.nextDocumentAttention;
+
   MaintenanceReminder? get nextMaintenanceAttention {
     return _dashboard?.nextMaintenanceAttention;
   }
@@ -297,9 +309,40 @@ class DriveTrackerController extends ChangeNotifier {
     return _odometerRepository.allForVehicle(vehicleId);
   }
 
-  Future<List<RecordCategory>> categoriesFor(RecordCategoryType type) {
-    return _categoryRepository.listByType(type);
+  Future<List<RecordCategory>> categoriesFor(
+    RecordCategoryType type, {
+    bool includeArchived = false,
+  }) {
+    return _categoryRepository.listByType(
+      type,
+      includeArchived: includeArchived,
+    );
   }
+
+  Future<RecordCategory?> categoryById(String id) =>
+      _categoryRepository.getById(id);
+
+  Future<List<RecordCategory>> categoryChoices(
+    RecordCategoryType type, {
+    String? originalCategoryId,
+  }) async {
+    final active = await categoriesFor(type);
+    if (originalCategoryId != null &&
+        !active.any((c) => c.id == originalCategoryId)) {
+      final original = await categoryById(originalCategoryId);
+      if (original != null && original.type == type) active.add(original);
+    }
+    return active;
+  }
+
+  Future<void> renameCategory(String id, String name) =>
+      _runMutation(() => _categoryService.rename(id, name));
+  Future<void> archiveCategory(String id, bool archived) =>
+      _runMutation(() => _categoryService.setArchived(id, archived));
+  Future<void> deleteCategory(String id) =>
+      _runMutation(() => _categoryService.delete(id));
+  Future<void> reorderCategories(RecordCategoryType type, List<String> ids) =>
+      _runMutation(() => _categoryService.reorder(type, ids));
 
   Future<List<DailyActivity>> historyForSelectedVehicle({
     DailyActivityType type = DailyActivityType.all,
@@ -445,17 +488,28 @@ class DriveTrackerController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _loadStoredPreferences();
+      await _loadStoredPreferences(refreshNotificationStatus: false);
       await _reloadData();
-      await _reconcileNotificationsBestEffort();
       _errorMessage = null;
     } catch (_) {
-      _errorMessage = 'DriveTracker could not load your local data.';
+      _errorMessage = '${ProductIdentity.name} could not load your local data.';
     } finally {
       _initialized = true;
       _busy = false;
-      notifyListeners();
+      if (!_disposed) {
+        notifyListeners();
+      }
     }
+
+    if (!_disposed && _errorMessage == null) {
+      _startPostStartupNotificationSync();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   Future<Vehicle> addVehicle(VehicleDraft draft) async {
@@ -709,7 +763,8 @@ class DriveTrackerController extends ChangeNotifier {
   }) async {
     return _runMutation(() async {
       final item = await _maintenanceItemService.createMaintenanceItem(draft);
-      if (baselineDateTime != null || baselineOdometer != null) {
+      if (!item.isExpiry &&
+          (baselineDateTime != null || baselineOdometer != null)) {
         await _serviceRecordService.createBaselineCompletion(
           item: item,
           eventDateTime: baselineDateTime ?? _clock(),
@@ -965,26 +1020,48 @@ class DriveTrackerController extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadStoredPreferences() async {
+  Future<void> _loadStoredPreferences({
+    bool refreshNotificationStatus = true,
+  }) async {
     _themeMode = _themeModeFromStorage(
       await _settingsRepository.getThemeMode(),
     );
     _localReminderNotificationsEnabled = await _settingsRepository
         .getLocalReminderNotificationsEnabled();
-    await _refreshNotificationStatus();
+    if (refreshNotificationStatus) {
+      await _refreshNotificationStatus();
+    }
   }
 
   Future<void> _refreshNotificationStatus() async {
     try {
-      _localNotificationPermissionStatus = await _notificationScheduler
-          .permissionStatus();
+      final status = await _notificationScheduler.permissionStatus();
+      if (_disposed) {
+        return;
+      }
+      _localNotificationPermissionStatus = status;
     } catch (_) {
+      if (_disposed) {
+        return;
+      }
       _localNotificationPermissionStatus =
           LocalNotificationPermissionStatus.unsupported;
     }
   }
 
-  Future<void> _reconcileNotificationsBestEffort() async {
+  Future<void> _reconcileNotificationsBestEffort() {
+    // Startup and user mutations must not cancel/schedule concurrently.
+    return _notificationReconciliation = _notificationReconciliation.then<void>(
+      (_) async {
+        if (_disposed) {
+          return;
+        }
+        await _performNotificationReconciliation();
+      },
+    );
+  }
+
+  Future<void> _performNotificationReconciliation() async {
     try {
       final result = await _notificationScheduler.reconcile(
         enabled: _localReminderNotificationsEnabled,
@@ -995,10 +1072,33 @@ class DriveTrackerController extends ChangeNotifier {
         await _refreshNotificationStatus();
       }
     } catch (_) {
+      if (_disposed) {
+        return;
+      }
       _localNotificationPermissionStatus =
           LocalNotificationPermissionStatus.unsupported;
     }
   }
+
+  void _startPostStartupNotificationSync() {
+    if (_postStartupNotificationSyncStarted) {
+      return;
+    }
+    _postStartupNotificationSyncStarted = true;
+    unawaited(() async {
+      await _refreshNotificationStatus();
+      if (_disposed) {
+        return;
+      }
+      await _reconcileNotificationsBestEffort();
+      if (!_disposed) {
+        notifyListeners();
+      }
+    }());
+  }
+
+  int _dataRevision = 0;
+  int get dataRevision => _dataRevision;
 
   Future<void> _reloadData({String? preferredVehicleId}) async {
     _activeVehicles = await _vehicleRepository.listActive();
@@ -1013,6 +1113,7 @@ class DriveTrackerController extends ChangeNotifier {
     if (selected == null) {
       await _settingsRepository.setSelectedVehicleId(null);
       _dashboard = null;
+      _dataRevision += 1;
       return;
     }
 
@@ -1023,6 +1124,7 @@ class DriveTrackerController extends ChangeNotifier {
       selected.id,
       now: _clock(),
     );
+    _dataRevision += 1;
   }
 
   Vehicle? _findActiveVehicle(String? vehicleId) {

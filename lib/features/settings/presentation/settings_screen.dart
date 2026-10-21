@@ -62,6 +62,16 @@ class SettingsScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right_rounded),
             ),
             const SizedBox(height: DTSpacing.xl),
+            const DTSectionHeader(title: 'Categories'),
+            ListTile(
+              key: const Key('manageCategoriesTile'),
+              leading: const Icon(Icons.label_outline),
+              title: const Text('Manage categories'),
+              subtitle: const Text('Expense and income categories'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => AppNavigation.openManagedCategories(context),
+            ),
+            const SizedBox(height: DTSpacing.xl),
             const DTSectionHeader(title: 'Notifications'),
             DTListCard(
               key: const Key('settingsLocalNotificationsTile'),

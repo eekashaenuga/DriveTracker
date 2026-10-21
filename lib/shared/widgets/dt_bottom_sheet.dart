@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme/dt_motion.dart';
+
 Future<T?> showDTBottomSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -8,6 +10,9 @@ Future<T?> showDTBottomSheet<T>({
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: builder,
+    sheetAnimationStyle: DTMotion.reduceMotionOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
+    builder: (context) => SafeArea(top: false, child: builder(context)),
   );
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/product_identity.dart';
 import '../../../shared/widgets/dt_category_icon.dart';
 import '../../../shared/widgets/dt_section_header.dart';
 import '../domain/data_safety_service.dart';
@@ -69,7 +70,8 @@ class _DataStorageScreenState extends State<DataStorageScreen> {
                   _ActionPanel(
                     icon: Icons.restore_rounded,
                     title: 'Restore',
-                    body: 'Choose a DriveTracker backup, review its contents, then replace the local data on this device.',
+                    body:
+                        'Choose a ${ProductIdentity.name} backup, review its contents, then replace the local data on this device.',
                     action: OutlinedButton.icon(
                       key: const Key('dataStorageRestoreButton'),
                       onPressed: _isBusy ? null : _pickRestoreBackup,

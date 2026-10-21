@@ -23,6 +23,7 @@ class MaintenanceScreen extends StatefulWidget {
 class _MaintenanceScreenState extends State<MaintenanceScreen> {
   Future<List<MaintenanceReminder>>? _remindersFuture;
   String? _loadedVehicleId;
+  int? _loadedRevision;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +41,10 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
       );
     }
 
-    if (_remindersFuture == null || _loadedVehicleId != vehicle.id) {
+    if (_remindersFuture == null ||
+        _loadedVehicleId != vehicle.id ||
+        _loadedRevision != controller.dataRevision) {
+      _loadedRevision = controller.dataRevision;
       _loadedVehicleId = vehicle.id;
       _remindersFuture = controller.maintenanceRemindersForSelectedVehicle();
     }
@@ -193,7 +197,8 @@ String _reminderSubtitle(MaintenanceReminder reminder, Vehicle vehicle) {
   final parts = <String>[
     if (item.category != null) item.category!,
     if (!item.reminderEnabled) 'Reminder off',
-    if (!item.hasInterval) 'No interval',
+    if (!item.hasInterval) 'Setup needed: choose an interval',
+    if (item.isExpiry) 'Expiry reminder',
     if (reminder.nextMileageDue != null)
       'Due at ${DTFormatters.odometer(reminder.nextMileageDue, vehicle.distanceUnit)}',
     if (reminder.nextDateDue != null) DTFormatters.date(reminder.nextDateDue!),
@@ -238,6 +243,7 @@ IconData _iconForState(MaintenanceReminderState state) {
     MaintenanceReminderState.due => Icons.notification_important_outlined,
     MaintenanceReminderState.dueSoon => Icons.schedule_rounded,
     MaintenanceReminderState.upcoming => Icons.upcoming_rounded,
+    MaintenanceReminderState.setupNeeded => Icons.tune_rounded,
     MaintenanceReminderState.normal => Icons.check_circle_outline_rounded,
   };
 }
@@ -249,6 +255,7 @@ Color _colorForState(BuildContext context, MaintenanceReminderState state) {
     MaintenanceReminderState.due => colors.error,
     MaintenanceReminderState.dueSoon => colors.tertiary,
     MaintenanceReminderState.upcoming => colors.primary,
+    MaintenanceReminderState.setupNeeded => colors.onSurfaceVariant,
     MaintenanceReminderState.normal => colors.onSurfaceVariant,
   };
 }

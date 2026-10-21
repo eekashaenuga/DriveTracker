@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import '../../../app/app_controller.dart';
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/product_identity.dart';
 import '../../../core/utilities/formatters.dart';
 import '../../../shared/widgets/dt_activity_row.dart';
 import '../../../shared/widgets/dt_empty_state.dart';
+import '../../../shared/widgets/dt_list_card.dart';
 import '../../../shared/widgets/dt_metric_card.dart';
 import '../../../shared/widgets/dt_primary_button.dart';
 import '../../../shared/widgets/dt_section_header.dart';
@@ -74,8 +76,6 @@ class _HomeDashboardContent extends StatelessWidget {
       children: [
         _VehicleHero(
           vehicle: vehicle,
-          currentOdometer: controller.currentOdometer,
-          unit: unit,
           hasMultipleVehicles: controller.activeVehicles.length > 1,
           onTap: () => showVehicleSelectorSheet(context),
         ),
@@ -94,10 +94,26 @@ class _HomeDashboardContent extends StatelessWidget {
         ),
         const SizedBox(height: DTSpacing.sm),
         const DTSectionHeader(title: 'Maintenance'),
-        _MaintenanceAttentionTile(
-          reminder: controller.nextMaintenanceAttention,
-          vehicle: vehicle,
-        ),
+        if (controller.showDocumentAttention)
+          DTListCard(
+            icon: Icons.event_outlined,
+            title: controller.nextDocumentAttention!.title,
+            subtitle:
+                '${controller.nextDocumentAttention!.state.label} · Expires ${DTFormatters.date(controller.nextDocumentAttention!.document.expiryDate!)}',
+            accentColor: _maintenanceColor(
+              context,
+              controller.nextDocumentAttention!.state,
+            ),
+            onTap: () => AppNavigation.openDocumentDetails(
+              context,
+              controller.nextDocumentAttention!.document.id,
+            ),
+          )
+        else
+          _MaintenanceAttentionTile(
+            reminder: controller.nextMaintenanceAttention,
+            vehicle: vehicle,
+          ),
         const SizedBox(height: DTSpacing.sm),
         const DTSectionHeader(title: 'Spending trend'),
         _SpendingTrendPanel(trend: controller.spendingTrend),
@@ -128,15 +144,11 @@ class _HomeDashboardContent extends StatelessWidget {
 class _VehicleHero extends StatelessWidget {
   const _VehicleHero({
     required this.vehicle,
-    required this.currentOdometer,
-    required this.unit,
     required this.hasMultipleVehicles,
     required this.onTap,
   });
 
   final Vehicle vehicle;
-  final int? currentOdometer;
-  final DistanceUnit unit;
   final bool hasMultipleVehicles;
   final VoidCallback onTap;
 
@@ -144,249 +156,46 @@ class _VehicleHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final switchLabel = hasMultipleVehicles ? 'Switch' : 'Manage';
-
-    final odometerLabel = DTFormatters.odometer(currentOdometer, unit);
-
-    return Semantics(
-      button: true,
-      label:
-          'Selected vehicle ${vehicle.name}, ${vehicle.description}, ${vehicle.registrationLabel}, current odometer $odometerLabel',
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: DTRadii.heroRadius,
-        child: InkWell(
-          key: const Key('selectedVehicleButton'),
-          onTap: onTap,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(ProductIdentity.name, style: theme.textTheme.titleLarge),
+        const SizedBox(height: DTSpacing.xl),
+        Material(
+          color: colors.secondaryContainer,
           borderRadius: DTRadii.heroRadius,
-          child: Ink(
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerHighest.withValues(
-                alpha: colors.brightness == Brightness.dark ? 0.58 : 0.72,
-              ),
-              borderRadius: DTRadii.heroRadius,
-              border: Border.all(
-                color: colors.outlineVariant.withValues(alpha: 0.55),
+          child: ListTile(
+            key: const Key('selectedVehicleButton'),
+            onTap: onTap,
+            contentPadding: const EdgeInsets.all(DTSpacing.lg),
+            leading: Icon(
+              Icons.directions_car_rounded,
+              color: colors.onSecondaryContainer,
+            ),
+            title: Text(
+              vehicle.name,
+              style: theme.textTheme.titleLarge?.copyWith(
+                color: colors.onSecondaryContainer,
               ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(DTSpacing.lg),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final compact = constraints.maxWidth < 340;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'DriveTracker',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    color: colors.primary,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                Text(
-                                  'Home',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: colors.onSurfaceVariant,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: DTSpacing.xs),
-                                Text(
-                                  vehicle.name,
-                                  maxLines: compact ? 2 : 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.headlineSmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0,
-                                      ),
-                                ),
-                                const SizedBox(height: DTSpacing.xs),
-                                Text(
-                                  _joinDisplay([
-                                    vehicle.description,
-                                    vehicle.registrationLabel,
-                                  ]),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colors.onSurfaceVariant,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: DTSpacing.md),
-                          Tooltip(
-                            message: hasMultipleVehicles
-                                ? 'Switch vehicle'
-                                : 'Vehicle options',
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: DTSpacing.sm,
-                                vertical: DTSpacing.xs,
-                              ),
-                              decoration: BoxDecoration(
-                                color: colors.surface.withValues(alpha: 0.68),
-                                borderRadius: BorderRadius.circular(
-                                  DTRadii.card,
-                                ),
-                                border: Border.all(
-                                  color: colors.outlineVariant,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    switchLabel,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: colors.onSurfaceVariant,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Icon(
-                                    hasMultipleVehicles
-                                        ? Icons.keyboard_arrow_down_rounded
-                                        : Icons.more_horiz_rounded,
-                                    size: DTIconSizes.sm,
-                                    color: colors.onSurfaceVariant,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: DTSpacing.lg),
-                      Row(
-                        children: [
-                          _VehicleSilhouette(accent: colors.primary),
-                          const SizedBox(width: DTSpacing.md),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Current odometer',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: colors.onSurfaceVariant,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                _OdometerText(
-                                  value: odometerLabel,
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
+            subtitle: Text(
+              _joinDisplay([vehicle.description, vehicle.registrationLabel]),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onSecondaryContainer,
+              ),
+            ),
+            trailing: Tooltip(
+              message: hasMultipleVehicles
+                  ? 'Switch vehicle'
+                  : 'Vehicle options',
+              child: Icon(
+                Icons.expand_more_rounded,
+                color: colors.onSecondaryContainer,
               ),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _VehicleSilhouette extends StatelessWidget {
-  const _VehicleSilhouette({required this.accent});
-
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      width: 76,
-      height: 48,
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.14),
-        borderRadius: DTRadii.controlRadius,
-        border: Border.all(color: accent.withValues(alpha: 0.28)),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Positioned(
-            bottom: 16,
-            left: 16,
-            right: 14,
-            child: Container(
-              height: 16,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.28),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(14),
-                  bottom: Radius.circular(7),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 12,
-            left: 11,
-            right: 10,
-            child: Container(
-              height: 12,
-              decoration: BoxDecoration(
-                color: accent,
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 8,
-            left: 18,
-            child: _VehicleWheel(color: colors.surface),
-          ),
-          Positioned(
-            bottom: 8,
-            right: 18,
-            child: _VehicleWheel(color: colors.surface),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VehicleWheel extends StatelessWidget {
-  const _VehicleWheel({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ],
     );
   }
 }
@@ -424,7 +233,7 @@ class _OdometerHero extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: colors.onSurfaceVariant,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -434,7 +243,7 @@ class _OdometerHero extends StatelessWidget {
         _OdometerText(
           value: DTFormatters.odometer(odometer, unit),
           style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -462,9 +271,7 @@ class _OdometerHero extends StatelessWidget {
       label: 'Current odometer ${DTFormatters.odometer(odometer, unit)}',
       child: Material(
         key: const Key('homeOdometerPanel'),
-        color: colors.primaryContainer.withValues(
-          alpha: colors.brightness == Brightness.dark ? 0.28 : 0.42,
-        ),
+        color: colors.surfaceContainerLow,
         borderRadius: DTRadii.cardRadius,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -475,7 +282,8 @@ class _OdometerHero extends StatelessWidget {
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              if (constraints.maxWidth < 320) {
+              if (constraints.maxWidth < 320 ||
+                  MediaQuery.textScalerOf(context).scale(16) > 20) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -509,13 +317,7 @@ class _OdometerText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(value, maxLines: 1, style: style),
-      ),
-    );
+    return Text(value, style: style);
   }
 }
 
@@ -568,6 +370,17 @@ class _MetricStrip extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (MediaQuery.textScalerOf(context).scale(14) > 18) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final metric in metrics) ...[
+                _MetricTile(data: metric),
+                const SizedBox(height: DTSpacing.sm),
+              ],
+            ],
+          );
+        }
         if (constraints.maxWidth < 340) {
           return Column(
             children: [
@@ -663,7 +476,7 @@ class _MaintenanceAttentionTile extends StatelessWidget {
         label: 'Maintenance, no maintenance due soon',
         child: Material(
           key: const Key('homeMaintenanceAttentionTile'),
-          color: colors.surfaceContainerHighest.withValues(alpha: 0.34),
+          color: colors.surfaceContainerLow,
           borderRadius: DTRadii.cardRadius,
           child: InkWell(
             borderRadius: DTRadii.cardRadius,
@@ -690,7 +503,7 @@ class _MaintenanceAttentionTile extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         Text(
@@ -727,7 +540,7 @@ class _MaintenanceAttentionTile extends StatelessWidget {
           ? subtitle
           : '${(progress * 100).round()} percent through interval',
       child: Material(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.42),
+        color: colors.surfaceContainerLow,
         borderRadius: DTRadii.cardRadius,
         child: InkWell(
           borderRadius: DTRadii.cardRadius,
@@ -751,7 +564,7 @@ class _MaintenanceAttentionTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -835,7 +648,7 @@ class _SpendingTrendPanelState extends State<_SpendingTrendPanel> {
     if (!hasData) {
       return Material(
         key: const Key('homeSpendingTrendEmpty'),
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.34),
+        color: colors.surfaceContainerLow,
         borderRadius: DTRadii.cardRadius,
         child: const Padding(
           padding: EdgeInsets.all(DTSpacing.md),
@@ -857,7 +670,7 @@ class _SpendingTrendPanelState extends State<_SpendingTrendPanel> {
       label: 'Spending trend for the last ${widget.trend.length} months',
       child: Material(
         key: const Key('homeSpendingTrend'),
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.38),
+        color: colors.surfaceContainerLow,
         borderRadius: DTRadii.cardRadius,
         child: Padding(
           padding: const EdgeInsets.all(DTSpacing.md),
@@ -867,7 +680,7 @@ class _SpendingTrendPanelState extends State<_SpendingTrendPanel> {
               Text(
                 '${_monthAbbreviation(selected.month)} · ${DTFormatters.moneyMinor(selected.amountMinor)} spent',
                 style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: DTSpacing.sm),
@@ -969,7 +782,7 @@ class _SpendingTrendBar extends StatelessWidget {
                             color: selected
                                 ? colors.onSurface
                                 : colors.onSurfaceVariant,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       )
@@ -1004,7 +817,7 @@ class _SpendingTrendBar extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: selected ? colors.onSurface : colors.onSurfaceVariant,
-                  fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w600,
                 ),
               ),
             ],
@@ -1129,6 +942,14 @@ Future<void> _openActivity(BuildContext context, DailyActivity activity) async {
       }
       break;
     case DailyActivityType.odometer:
+      if (context.mounted) {
+        await AppNavigation.openRecordDetails(
+          context,
+          DailyActivityType.odometer,
+          activity.recordId,
+        );
+      }
+      break;
     case DailyActivityType.all:
       break;
   }
@@ -1173,7 +994,7 @@ Widget? _activityTrailing(BuildContext context, DailyActivity activity) {
     textAlign: TextAlign.end,
     style: Theme.of(context).textTheme.labelLarge?.copyWith(
       color: isIncome ? colors.tertiary : colors.onSurface,
-      fontWeight: FontWeight.w900,
+      fontWeight: FontWeight.w600,
     ),
   );
 }
@@ -1222,6 +1043,7 @@ IconData _maintenanceIcon(MaintenanceReminderState state) {
     MaintenanceReminderState.due => Icons.notification_important_outlined,
     MaintenanceReminderState.dueSoon => Icons.schedule_rounded,
     MaintenanceReminderState.upcoming => Icons.upcoming_rounded,
+    MaintenanceReminderState.setupNeeded => Icons.tune_rounded,
     MaintenanceReminderState.normal => Icons.check_circle_outline_rounded,
   };
 }
@@ -1233,6 +1055,7 @@ Color _maintenanceColor(BuildContext context, MaintenanceReminderState state) {
     MaintenanceReminderState.due => colors.error,
     MaintenanceReminderState.dueSoon => colors.tertiary,
     MaintenanceReminderState.upcoming => colors.primary,
+    MaintenanceReminderState.setupNeeded => colors.onSurfaceVariant,
     MaintenanceReminderState.normal => colors.onSurfaceVariant,
   };
 }

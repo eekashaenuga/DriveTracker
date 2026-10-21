@@ -81,7 +81,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Text(
               'History',
               style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.w900),
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: DTSpacing.xs),
             Text(
@@ -150,8 +150,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<List<RecordCategory>> _loadCategories(
     DriveTrackerController controller,
   ) async {
-    final expense = await controller.categoriesFor(RecordCategoryType.expense);
-    final income = await controller.categoriesFor(RecordCategoryType.income);
+    final expense = await controller.categoriesFor(
+      RecordCategoryType.expense,
+      includeArchived: true,
+    );
+    final income = await controller.categoriesFor(
+      RecordCategoryType.income,
+      includeArchived: true,
+    );
     return [...expense, ...income];
   }
 
@@ -225,16 +231,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
         break;
       case DailyActivityType.odometer:
         if (mounted) {
-          final editRequested = await showDialog<bool>(
-            context: context,
-            builder: (_) => _OdometerActivityDialog(activity: activity),
+          await AppNavigation.openRecordDetails(
+            context,
+            DailyActivityType.odometer,
+            activity.recordId,
           );
-          if (editRequested == true && mounted) {
-            final entry = await controller.odometerEntryById(activity.recordId);
-            if (entry != null && mounted) {
-              await AppNavigation.openEditOdometerEntry(context, entry);
-            }
-          }
         }
         break;
       case DailyActivityType.all:
@@ -243,6 +244,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (mounted) {
       setState(() {
         _loadedSignature = null;
+        _categoriesFuture = _loadCategories(controller);
       });
     }
   }
@@ -332,6 +334,7 @@ class _HistoryFilters extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
+          isExpanded: true,
           key: const Key('historyVehicleFilterField'),
           initialValue: safeSelectedVehicleId ?? _allVehicles,
           decoration: const InputDecoration(
@@ -344,7 +347,10 @@ class _HistoryFilters extends StatelessWidget {
               child: Text('All vehicles'),
             ),
             for (final vehicle in vehicles)
-              DropdownMenuItem(value: vehicle.id, child: Text(vehicle.name)),
+              DropdownMenuItem(
+                value: vehicle.id,
+                child: Text(vehicle.name, overflow: TextOverflow.ellipsis),
+              ),
           ],
           onChanged: (value) {
             onVehicleChanged(value == _allVehicles ? null : value);
@@ -435,6 +441,7 @@ class _HistoryFilters extends StatelessWidget {
                 ? filter.categoryId
                 : null;
             return DropdownButtonFormField<String>(
+              isExpanded: true,
               key: const Key('historyCategoryFilterField'),
               initialValue: selectedCategoryId ?? '__all_categories__',
               decoration: const InputDecoration(
@@ -449,7 +456,7 @@ class _HistoryFilters extends StatelessWidget {
                 for (final category in categories)
                   DropdownMenuItem(
                     value: category.id,
-                    child: Text(category.name),
+                    child: Text(category.name, overflow: TextOverflow.ellipsis),
                   ),
               ],
               onChanged: (value) {
@@ -573,7 +580,7 @@ class _ActivityList extends StatelessWidget {
             child: Text(
               month,
               style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800),
+                  ?.copyWith(fontWeight: FontWeight.w500),
             ),
           ),
         );
@@ -611,7 +618,7 @@ class _ActivityList extends StatelessWidget {
     return Text(
       DTFormatters.moneyMinor(amount),
       style: Theme.of(context).textTheme.labelLarge
-          ?.copyWith(color: color, fontWeight: FontWeight.w800),
+          ?.copyWith(color: color, fontWeight: FontWeight.w500),
     );
   }
 
@@ -666,48 +673,5 @@ class _ActivityList extends StatelessWidget {
       'December',
     ];
     return '${months[local.month - 1]} ${local.year}';
-  }
-}
-
-class _OdometerActivityDialog extends StatelessWidget {
-  const _OdometerActivityDialog({required this.activity});
-
-  final DailyActivity activity;
-
-  @override
-  Widget build(BuildContext context) {
-    final unit = activity.vehicleDistanceUnit ?? DistanceUnit.miles;
-    return AlertDialog(
-      key: const Key('historyOdometerDetails'),
-      title: const Text('Odometer reading'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            DTFormatters.odometer(activity.odometer, unit),
-            style: Theme.of(context).textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: DTSpacing.sm),
-          Text(DTFormatters.dateTime(activity.eventDateTime)),
-          if (activity.vehicleName != null) ...[
-            const SizedBox(height: DTSpacing.xs),
-            Text(activity.vehicleName!),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          key: const Key('historyEditOdometerButton'),
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Edit'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Close'),
-        ),
-      ],
-    );
   }
 }

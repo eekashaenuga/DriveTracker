@@ -85,6 +85,7 @@ class IncomeService {
     }
     await _validateDraft(
       draft,
+      originalCategoryId: existing.categoryId,
       allowHistorical: allowHistorical,
       confirmLargeIncrease: confirmLargeIncrease,
     );
@@ -131,6 +132,7 @@ class IncomeService {
 
   Future<void> _validateDraft(
     IncomeDraft draft, {
+    String? originalCategoryId,
     required bool allowHistorical,
     required bool confirmLargeIncrease,
   }) async {
@@ -142,6 +144,7 @@ class IncomeService {
       repository: categoryRepository,
       categoryId: draft.categoryId,
       type: RecordCategoryType.income,
+      originalCategoryId: originalCategoryId,
     );
     DailyRecordValidation.requirePositiveMoney(draft.amountMinor, 'Amount');
     DailyRecordValidation.requireOptionalOdometer(draft.odometer);

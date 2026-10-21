@@ -1,6 +1,10 @@
-# DriveTracker
+# Vehnora
 
-DriveTracker is a local-first Flutter application for managing vehicles, mileage, fuel, expenses, and vehicle-related income without accounts, telemetry, cloud APIs, or fabricated dashboard data.
+Your vehicle, organised.
+
+**Vehnora — Vehicle Manager** (formerly DriveTracker).
+
+Vehnora is a local-first Flutter application for managing vehicles, mileage, fuel, expenses, and vehicle-related income without accounts, telemetry, cloud APIs, or fabricated dashboard data.
 
 ## Current Milestone
 
@@ -8,7 +12,7 @@ Implemented through Milestone 10:
 
 - Material 3 app shell with Home, Insights, central add action, Reminders, and More.
 - First-run flow from welcome screen to adding the first vehicle.
-- SQLite schema version 4 with controlled migrations from V1, V2, and V3.
+- SQLite schema version 5 with controlled additive migrations from V1–V4.
 - Vehicle creation, editing, listing, switching, and archiving.
 - Multiple active vehicles with persisted selected vehicle.
 - Odometer entries with manual readings and historical lower-reading confirmation.
@@ -20,7 +24,7 @@ Implemented through Milestone 10:
 - Vehicle-related income with seeded and custom categories.
 - Service records with one garage visit containing one or more tracked or untracked service items.
 - User-defined maintenance items with optional mileage intervals, date intervals, warning thresholds, and archiving.
-- A calculated reminder engine for normal, upcoming, due-soon, due, and overdue maintenance states.
+- A calculated reminder engine for setup-needed, normal, upcoming, due-soon, due, and overdue maintenance states.
 - Zero-cost baseline maintenance history for establishing last-completed mileage/date without creating fake spend.
 - Functional Reminders screen for the selected vehicle, including direct "Record service" flows.
 - Unified History for fuel, expense, income, service, and manual odometer records, with vehicle, record type, date-range, category, and text-search filters.
@@ -28,7 +32,7 @@ Implemented through Milestone 10:
 - Insights dashboard backed only by stored records, including expenditure/income/net summaries, distance availability, weighted fuel price, aggregate full-to-full MPG, spending buckets, category breakdowns, fuel and odometer trend data, and drill-down into filtered History.
 - Vehicle Documents for selected-vehicle records such as Insurance, MOT, V5C, purchase receipts, warranties, breakdown cover, tax, finance/lease paperwork, and custom document categories.
 - Document lifecycle support with active/current documents, archived history, renewal that preserves old records, and deliberate permanent delete.
-- Local file attachments for documents, refuels, services, expenses, and income records, storing metadata in SQLite while copying PDFs/JPG/JPEG/PNG files into DriveTracker-managed app storage.
+- Local file attachments for documents, refuels, services, expenses, and income records, storing metadata in SQLite while copying PDFs/JPG/JPEG/PNG files into Vehnora-managed app storage.
 - Document expiry reminders derived from recorded expiry dates and shown in the Reminders screen without claiming external verification.
 - Android local notifications for date-based maintenance and document reminders, scheduled from the existing reminder data after the user enables notification permission.
 - Tools entry under More with a polished Fuel Calculator for Trip Cost, Cost Sharing, Fuel Required, and Fuel Price Comparison.
@@ -36,8 +40,8 @@ Implemented through Milestone 10:
 - Selected-vehicle calculator defaults that can use the current vehicle's latest trustworthy full-to-full fuel economy and latest recorded fuel price, while keeping manual input available and clearly labelled.
 - Ephemeral fuel estimates that do not create refuels, expenses, services, odometer readings, calculator history, or any other persisted vehicle record.
 - Data & Storage tools for local backup creation, backup inspection/restore with a safety backup first, and CSV export for spreadsheet review.
-- Backup format version 1 with schema version 4 database data and managed attachments kept portable through relative attachment paths.
-- A consolidated DriveTracker presentation system using shared spacing/radius tokens, category accents, icon treatments, metric cards, list cards, status badges, and form sections.
+- Backup format version 1 with schema version 5 database data (older supported databases migrate on restore) and managed attachments kept portable through relative attachment paths.
+- A consolidated Vehnora presentation system using shared spacing/radius tokens, category accents, icon treatments, metric cards, list cards, status badges, and form sections.
 - A polished Home dashboard with stronger vehicle identity, current odometer context, category-aware metrics, reminder status badges, interactive spending trend, and cleaner recent activity rows.
 - A two-column graphical quick-entry sheet for Refuel, Service, Expense, Income, Odometer, and Maintenance entry points on phone-width layouts.
 - App-wide visual polish across More, Reminders, Maintenance, History activity rows, forms, attachments, settings, and data/storage summaries while preserving existing behavior.
@@ -78,7 +82,7 @@ The project uses a feature-oriented structure:
 - `lib/features/insights`: derived analytics repository, range-aware insight models, and the Insights dashboard.
 - `lib/features/reminders`, `lib/features/more`, `lib/features/settings`: milestone screens and settings foundation.
 - `lib/core/calculations`: reusable local-calendar date-range and bucket rules for analytics and History filtering.
-- `lib/shared/widgets`: reusable DriveTracker UI components used by current screens.
+- `lib/shared/widgets`: reusable Vehnora UI components used by current screens.
 
 Presentation widgets do not issue raw SQL. Business rules live in validators and services so they can be tested outside widgets.
 
@@ -106,9 +110,9 @@ See `docs/architecture.md` for the schema and design notes.
 
 ## Documents And Attachments
 
-Documents are vehicle-specific user records. DriveTracker stores titles, categories, optional provider/reference/notes, issue dates, expiry dates, archive state, and lifecycle timestamps. Status is derived from the recorded expiry date: no expiry, recorded, expiring soon within 30 days, or expired after the date has passed. This is only a local record of what the user entered; DriveTracker does not verify MOT, tax, insurance, ownership, document authenticity, or legal validity.
+Documents are vehicle-specific user records. Vehnora stores titles, categories, optional provider/reference/notes, issue dates, expiry dates, archive state, and lifecycle timestamps. Status is derived from the recorded expiry date: no expiry, recorded, expiring soon within 30 days, or expired after the date has passed. This is only a local record of what the user entered; Vehnora does not verify MOT, tax, insurance, ownership, document authenticity, or legal validity.
 
-Attachments are optional. SQLite stores attachment metadata and a portable relative path. Actual file bytes are copied into DriveTracker-managed application storage under `attachments/<parent-type>/<parent-id>/<generated-id>.<extension>`, not stored as BLOBs and not permanently linked to external picker locations. Supported files are PDF, JPG/JPEG, and PNG up to 20 MB each. Deletion removes database metadata before best-effort managed-file cleanup so filesystem failures do not corrupt record metadata.
+Attachments are optional. SQLite stores attachment metadata and a portable relative path. Actual file bytes are copied into Vehnora-managed application storage under `attachments/<parent-type>/<parent-id>/<generated-id>.<extension>`, not stored as BLOBs and not permanently linked to external picker locations. Supported files are PDF, JPG/JPEG, and PNG up to 20 MB each. Deletion removes database metadata before best-effort managed-file cleanup so filesystem failures do not corrupt record metadata.
 
 ## Tools And Fuel Calculator
 
@@ -131,15 +135,15 @@ Milestone 8 adds local backup, restore, and CSV export without changing the sche
 
 Clean installations can restore an existing `.dtbackup` directly from the Welcome screen before any vehicle has been added.
 
-Notification schedules are not part of the portable backup format. Reminder data in SQLite remains authoritative; after startup, data reload, or restore, DriveTracker rebuilds local notification schedules from the restored maintenance and document records.
+Notification schedules are not part of the portable backup format. Reminder data in SQLite remains authoritative; after startup, data reload, or restore, Vehnora rebuilds local notification schedules from the restored maintenance and document records.
 
 ## Local Notifications
 
-DriveTracker V1 supports Android local notifications for date-based reminders. Users enable them from Settings, which requests Android notification permission in context rather than on first launch. If permission is denied or later disabled in Android, in-app reminders continue to work and scheduled local alerts are not treated as enabled.
+Vehnora V1 supports Android local notifications for date-based reminders. Users enable them from Settings, which requests Android notification permission in context rather than on first launch. If permission is denied or later disabled in Android, in-app reminders continue to work and scheduled local alerts are not treated as enabled.
 
-Date reminders are scheduled for 9:00 AM local time. Maintenance date reminders use the item's existing date warning threshold to choose the first alert day. Document expiry reminders use the existing 30-day expiry reminder window. DriveTracker uses inexact Android scheduling for these ordinary reminders and does not request exact-alarm permission.
+Date reminders are scheduled for 9:00 AM local time. Existing records retain their single date-warning schedule until timing is customized. New MOT expiry records use calendar offsets at three months, one month, 15 days and seven days before expiry, plus an inclusive daily countdown from seven days before through expiry. Overlapping days are deduplicated and past alert times are omitted. Users can add/remove offsets and adjust the countdown in maintenance and document forms. Vehnora uses inexact Android scheduling for these ordinary reminders and does not request exact-alarm permission.
 
-Mileage reminders remain in-app for V1. They update when odometer data changes, but DriveTracker does not run continuous background mileage monitoring or claim closed-app mileage notifications.
+Mileage reminders remain in-app for V1. They update when odometer data changes, but Vehnora does not run continuous background mileage monitoring or claim closed-app mileage notifications.
 
 ## Release Signing
 
@@ -154,9 +158,13 @@ storeFile=...
 
 Use an absolute `storeFile` path or a path that Gradle can resolve from the Android app module. The file is ignored by git, along with common keystore file extensions. If release signing values are absent, release builds fail clearly instead of falling back to debug signing. Debug builds continue to use the normal debug signing flow.
 
+For Android upgrades, v1.1.0 must keep the published application id `com.eekashaenuga.drivetracker`, use a `versionCode` greater than v1.0.0's `1`, and be signed with the same private keystore/key alias used for the v1.0.0 release. Changing the application id or signing certificate makes Android treat the build as a different or incompatible app, which prevents an in-place upgrade and can leave existing app data inaccessible.
+
+Android splash resources can be updated safely as presentation-only resources. They should not change `applicationId`, release signing, or the monotonic `versionCode` requirements above.
+
 ## Presentation System
 
-Milestone 9 is a polish milestone. It adds no schema migration, backup-format change, dependency change, calculator formula change, analytics change, or data-path change. The app now uses shared DriveTracker tokens and widgets for category icons, status badges, list cards, metric cards, form sections, and themed surfaces. Visual changes are meant to improve hierarchy, responsiveness, light/dark consistency, and accessibility while continuing to show only real stored or safely derived vehicle data.
+Milestone 9 is a polish milestone. It adds no schema migration, backup-format change, dependency change, calculator formula change, analytics change, or data-path change. The app now uses shared Vehnora tokens and widgets for category icons, status badges, list cards, metric cards, form sections, and themed surfaces. Visual changes are meant to improve hierarchy, responsiveness, light/dark consistency, and accessibility while continuing to show only real stored or safely derived vehicle data.
 
 ## Run
 
@@ -178,8 +186,54 @@ flutter build apk --debug
 
 ## Privacy
 
-DriveTracker is local-first. It stores vehicle, odometer, refuel, expense, income, category, service, maintenance, document, and attachment metadata in a local SQLite database on the device. Managed attachment files stay in app-controlled local storage. Calculator inputs and results are not persisted. It does not require login, internet access, analytics SDKs, advertising SDKs, or cloud sync.
+Vehnora is local-first. It stores vehicle, odometer, refuel, expense, income, category, service, maintenance, document, and attachment metadata in a local SQLite database on the device. Managed attachment files stay in app-controlled local storage. Calculator inputs and results are not persisted. It does not require login, internet access, analytics SDKs, advertising SDKs, or cloud sync.
 
 ## Roadmap Summary
 
 Next milestones can add XLSX export, PDF reports, configurable currencies, optional first-run setup prompts, sync, account-backed optional features, OCR, and external integrations. These should build on the existing repository/service boundaries, schema migration path, backup manifest, local-notification scheduler, and portable relative attachment paths rather than replacing user data.
+
+## Vehnora brand assets
+
+Brand preparation is documented in [assets/branding/README.md](assets/branding/README.md).
+The approved `Vehnora-V-Master.png` now supplies full-colour adaptive/legacy
+icons, Android 13+ themed icons, native splash and the welcome-screen mark.
+Exports preserve the approved raster artwork; only the monochrome mask is simplified.
+
+Public naming is independent of persistent identity: retain
+`com.eekashaenuga.drivetracker`, the Dart package `drivetracker`, database
+`drive_tracker.db`, notification channel `drive_tracker_reminders`, platform
+channels/provider authority, backup manifest app marker `DriveTracker`, MIME type
+`application/vnd.drivetracker.backup`, and `.dtbackup` files. Schema remains 5,
+backup format remains 1, and app version remains `1.1.0+2`.
+
+## Maintenance, MOT and expiry reminders (V1.1)
+
+Scheduled maintenance continues to derive its next date/mileage from service completions and zero-cost baselines. With both intervals, the more urgent threshold drives attention. Incomplete schedules are explicitly marked Setup needed; permission denial does not hide in-app status.
+
+MOT, insurance, road tax and custom date reminders can be created through Maintenance & expiry. Expiry records need an expiry date and use renewal instead of service completion. Existing V4 items, including items named MOT, remain scheduled maintenance so linked history is never silently reinterpreted. Create a separate expiry record and archive an old interval record when moving to expiry-only tracking.
+
+V5 adds record kind, expiry date, notes and reminder timing to maintenance items, and reminder timing to documents. No tables or existing records are dropped. Active-name uniqueness is scoped by vehicle and record kind, so an old MOT interval can coexist with an expiry-only MOT record. Backup container format stays V1; V4 backups restore through the normal migration path. Notification schedules are rebuilt from database records, including after edits, archive/delete, and restore.
+
+Home and Reminders prioritize overdue, due, due-soon and upcoming records before incomplete setup, including date documents. Notification wording is shared with maintenance details and evaluated for the delivery day. MOT exception wording follows https://www.gov.uk/getting-an-mot; the app does not verify a certificate or vehicle roadworthiness.
+
+## Managed categories and record details (V1.1)
+
+Settings → Manage categories manages persisted expense/income categories: add,
+rename, drag or menu reorder, archive, restore and safe deletion. Built-in values
+are protected from rename/archive/delete; ordering is presentation-only. Referenced
+custom categories cannot be deleted; archive them instead. Names remain reserved
+while archived. Historical records retain their category relationship, and edits
+may retain the original archived category without making it available for new
+records. Category management reuses the existing V5 table; no V6 migration or
+backup format change is needed.
+
+Fuel types, distance units, record kinds and other system enums remain fixed.
+Document category chips and Maintenance/MOT type presets remain fixed suggestions;
+their custom text is stored per record, not a separate reusable list. Maintenance
+items keep their existing vehicle-specific management and completion history.
+
+History, Home recent activity and maintenance service history open read-only
+Details before an explicit Edit action. Refuel, expense, income, service and manual
+odometer details reuse existing edit forms and refresh after save. Attachments on
+Details can be opened; add/remove remain in Edit. Record IDs, validations, money
+precision, odometer warnings and maintenance/expiry relationships are preserved.

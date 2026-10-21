@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:drivetracker/app/app.dart';
 import 'package:drivetracker/app/app_controller.dart';
+import 'package:drivetracker/core/product_identity.dart';
 import 'package:drivetracker/app/theme/dt_theme.dart';
 import 'package:drivetracker/core/database/database_migrations.dart';
 import 'package:drivetracker/core/notifications/local_notification_service.dart';
@@ -305,6 +306,28 @@ void main() {
       );
     });
 
+    test('rejects a backup with an incomplete current schema', () async {
+      final services = await createFileBackedTestServices();
+      final service = _dataSafetyService(services);
+      final output = await Directory.systemTemp.createTemp(
+        'dt_incomplete_schema_backup_',
+      );
+      addTearDown(() async {
+        if (await output.exists()) {
+          await output.delete(recursive: true);
+        }
+      });
+      final incomplete = File(
+        p.join(output.path, 'incomplete_schema.dtbackup'),
+      );
+      await _writeIncompleteSchemaBackup(incomplete, services);
+
+      await expectLater(
+        service.inspectBackupFile(incomplete.path),
+        throwsA(isA<DataSafetyException>()),
+      );
+    });
+
     test('restores database and managed attachments from backup', () async {
       final services = await createFileBackedTestServices();
       final seeded = await _seedSampleData(services, vehicleName: 'Original');
@@ -449,6 +472,10 @@ void main() {
       );
 
       expect(archive.find('README.txt'), isNotNull);
+      expect(
+        utf8.decode(archive.find('README.txt')!.readBytes()!),
+        contains(ProductIdentity.csvExportTitle),
+      );
       expect(vehiclesCsv, contains('Commuter'));
       expect(attachmentsCsv, contains('policy.pdf'));
     });
@@ -606,7 +633,7 @@ void main() {
       );
       await _pumpUntilFound(
         tester,
-        find.text('Backup file is not a valid DriveTracker backup.'),
+        find.text('Backup file is not a valid ${ProductIdentity.name} backup.'),
       );
 
       expect(find.byKey(const Key('addFirstVehicleButton')), findsOneWidget);
@@ -705,7 +732,7 @@ void main() {
         );
         expect(
           notifications.scheduled.single.body,
-          'Restored Fiesta - Engine Oil due on 1 Oct 2026',
+          'Restored Fiesta: Engine Oil is due on 1 Oct 2026. Arrange the required maintenance.',
         );
         expect(await notifications.pendingNotificationIds(), [
           notifications.scheduled.single.id,
@@ -1270,6 +1297,63 @@ Future<void> _writeArchiveWithDuplicateManifest(
     ArchiveFile.string(DataSafetyService.manifestPath, '{}'),
   );
   await encoder.close();
+}
+
+Future<void> _writeIncompleteSchemaBackup(
+  File incompleteBackup,
+  TestServices services,
+) async {
+  final tempDir = await Directory.systemTemp.createTemp(
+    'dt_incomplete_schema_db_',
+  );
+  addTearDown(() async {
+    if (await tempDir.exists()) {
+      await tempDir.delete(recursive: true);
+    }
+  });
+  final databaseFile = File(p.join(tempDir.path, 'database.sqlite'));
+  final db = await services.database.databaseFactory.openDatabase(
+    databaseFile.path,
+  );
+  try {
+    for (final table in DatabaseMigrations.requiredTablesFor(
+      DatabaseMigrations.schemaVersion,
+    )) {
+      await db.execute('CREATE TABLE $table (id TEXT)');
+    }
+    await db.execute(
+      'PRAGMA user_version = ${DatabaseMigrations.schemaVersion}',
+    );
+  } finally {
+    await db.close();
+  }
+
+  final tables = DatabaseMigrations.requiredTablesFor(
+    DatabaseMigrations.schemaVersion,
+  );
+  final manifest = BackupManifest(
+    backupFormatVersion: DataSafetyService.backupFormatVersion,
+    schemaVersion: DatabaseMigrations.schemaVersion,
+    createdAtUtc: DateTime.utc(2026, 9, 10, 12),
+    databasePath: DataSafetyService.databaseArchivePath,
+    databaseBytes: await databaseFile.length(),
+    tableCounts: {for (final table in tables) table: 0},
+    attachments: const [],
+  );
+  final archive = Archive()
+    ..add(
+      ArchiveFile.string(
+        DataSafetyService.manifestPath,
+        const JsonEncoder().convert(manifest.toJson()),
+      ),
+    )
+    ..add(
+      ArchiveFile.bytes(
+        DataSafetyService.databaseArchivePath,
+        await databaseFile.readAsBytes(),
+      ),
+    );
+  await _writeArchive(incompleteBackup, archive);
 }
 
 Future<void> _writeFutureSchemaBackup(

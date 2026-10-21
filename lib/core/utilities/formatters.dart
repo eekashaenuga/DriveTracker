@@ -4,6 +4,13 @@ import 'money.dart';
 class DTFormatters {
   const DTFormatters._();
 
+  static String costPerDistance(double? minor, DistanceUnit? unit) {
+    if (minor == null || !minor.isFinite || minor < 0 || unit == null) {
+      return 'Unavailable';
+    }
+    return '${MoneyAmount.formatMinor(minor.round())}/${unit.shortLabel}';
+  }
+
   static String wholeNumber(int value) {
     return value.toString().replaceAllMapped(
       RegExp(r'\B(?=(\d{3})+(?!\d))'),

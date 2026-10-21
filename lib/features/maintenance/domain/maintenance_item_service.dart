@@ -5,6 +5,7 @@ import '../../vehicles/data/vehicle_repository.dart';
 import '../data/maintenance_item_repository.dart';
 import '../data/service_record_repository.dart';
 import 'maintenance_item.dart';
+import '../../reminders/domain/date_reminder_schedule.dart';
 import 'maintenance_reminder.dart';
 import 'maintenance_reminder_engine.dart';
 import 'service_record.dart';
@@ -38,6 +39,7 @@ class MaintenanceItemService {
     final duplicate = await maintenanceItemRepository.findActiveByName(
       draft.vehicleId,
       cleanName,
+      kind: draft.kind,
     );
     if (duplicate != null) {
       throw ValidationException([
@@ -51,6 +53,12 @@ class MaintenanceItemService {
       vehicleId: draft.vehicleId,
       name: cleanName,
       category: DailyRecordValidation.cleanOptional(draft.category),
+      kind: draft.kind,
+      expiryDate: draft.expiryDate,
+      notes: DailyRecordValidation.cleanOptional(draft.notes),
+      reminderSchedule:
+          draft.reminderSchedule ??
+          (draft.isMot ? DateReminderSchedule.mot : null),
       mileageInterval: draft.mileageInterval,
       timeIntervalDays: draft.timeIntervalDays,
       mileageWarning: draft.mileageWarning,
@@ -72,12 +80,18 @@ class MaintenanceItemService {
     if (existing == null) {
       throw const ValidationException(['Maintenance item not found.']);
     }
+    if (draft.vehicleId != existing.vehicleId || draft.kind != existing.kind) {
+      throw const ValidationException([
+        'Keep the original vehicle and record type. Create a separate expiry reminder instead.',
+      ]);
+    }
     await _validateDraft(draft);
     final cleanName = draft.name.trim();
     final duplicate = await maintenanceItemRepository.findActiveByName(
       draft.vehicleId,
       cleanName,
       excludingId: itemId,
+      kind: draft.kind,
     );
     if (duplicate != null) {
       throw ValidationException([
@@ -90,6 +104,13 @@ class MaintenanceItemService {
       vehicleId: draft.vehicleId,
       name: cleanName,
       category: DailyRecordValidation.cleanOptional(draft.category),
+      kind: draft.kind,
+      expiryDate: draft.expiryDate,
+      notes: DailyRecordValidation.cleanOptional(draft.notes),
+      reminderSchedule:
+          draft.reminderSchedule ??
+          existing.reminderSchedule ??
+          (draft.isMot ? DateReminderSchedule.mot : null),
       mileageInterval: draft.mileageInterval,
       timeIntervalDays: draft.timeIntervalDays,
       mileageWarning: draft.mileageWarning,
@@ -176,6 +197,17 @@ class MaintenanceItemService {
       vehicleRepository,
       draft.vehicleId,
     );
+    if (draft.reminderSchedule?.isValid == false) {
+      throw const ValidationException(['Invalid reminder timing.']);
+    }
+    if (draft.isExpiry &&
+        (draft.expiryDate == null ||
+            draft.mileageInterval != null ||
+            draft.timeIntervalDays != null)) {
+      throw const ValidationException([
+        'Expiry reminders need an expiry date, without service intervals.',
+      ]);
+    }
     if (draft.name.trim().isEmpty) {
       throw const ValidationException(['Maintenance item name is required.']);
     }

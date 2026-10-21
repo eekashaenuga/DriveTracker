@@ -67,6 +67,7 @@ class MaintenanceItemRepository {
     String vehicleId,
     String name, {
     String? excludingId,
+    MaintenanceRecordKind kind = MaintenanceRecordKind.scheduled,
     sqflite.DatabaseExecutor? executor,
   }) async {
     final cleanName = name.trim();
@@ -77,12 +78,9 @@ class MaintenanceItemRepository {
     final db = await _executor(executor);
     final rows = await db.query(
       'maintenance_items',
-      where: excludingId == null
-          ? 'vehicle_id = ? AND is_archived = ? AND name COLLATE NOCASE = ?'
-          : 'vehicle_id = ? AND is_archived = ? AND name COLLATE NOCASE = ? AND id != ?',
-      whereArgs: excludingId == null
-          ? [vehicleId, 0, cleanName]
-          : [vehicleId, 0, cleanName, excludingId],
+      where:
+          'vehicle_id = ? AND is_archived = 0 AND name COLLATE NOCASE = ? AND record_kind = ?${excludingId == null ? '' : ' AND id != ?'}',
+      whereArgs: [vehicleId, cleanName, kind.name, ?excludingId],
       limit: 1,
     );
     if (rows.isEmpty) {

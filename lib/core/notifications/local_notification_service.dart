@@ -6,6 +6,8 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../product_identity.dart';
+
 enum LocalNotificationPermissionStatus { unsupported, denied, granted }
 
 class LocalNotificationRequest {
@@ -90,7 +92,7 @@ class FlutterLocalNotificationClient implements LocalNotificationClient {
   );
   static const _androidDetails = AndroidNotificationDetails(
     'drive_tracker_reminders',
-    'DriveTracker reminders',
+    ProductIdentity.notificationChannelName,
     channelDescription:
         'Local reminders for vehicle documents and scheduled maintenance.',
     importance: Importance.defaultImportance,

@@ -1,0 +1,106 @@
+{
+  "master_sha256": "129b6da08941951c3f313bfd2f6d6e79cb64c26a15896871c630bdbbf90ea431",
+  "master_size": [
+    1312,
+    1199
+  ],
+  "alpha_visible_threshold": 8,
+  "visible_bounds": [
+    95,
+    244,
+    1234,
+    1049
+  ],
+  "crop_bounds": [
+    91,
+    240,
+    1238,
+    1053
+  ],
+  "outputs": {
+    "android/app/src/main/res/drawable-xxxhdpi/vehnora_launcher_foreground.png": {
+      "size": [
+        432,
+        432
+      ],
+      "sha256": "b6e0a3ca6e66b854ad9a27a8a85fbb73905b6f7db60098dff8ced4ab2bdf2322"
+    },
+    "android/app/src/main/res/drawable-xxxhdpi/vehnora_launcher_monochrome.png": {
+      "size": [
+        432,
+        432
+      ],
+      "sha256": "b125bad5911a57b2e2da4d5ea9a807fd15ade4f2ced5ca556123515fb856077c"
+    },
+    "android/app/src/main/res/drawable-xxxhdpi/vehnora_splash.png": {
+      "size": [
+        1152,
+        1152
+      ],
+      "sha256": "ee723a3d826290d1859d085bcf2afd2c8f090bc73822e084bfa6cd099e129006"
+    },
+    "android/app/src/main/res/mipmap-mdpi/ic_launcher.png": {
+      "size": [
+        48,
+        48
+      ],
+      "sha256": "a700fd1aa9f17d8ba46d2d0ad824a26cc3c7e12999bb8e7be1068ecf1053cd8d"
+    },
+    "android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
+      "size": [
+        72,
+        72
+      ],
+      "sha256": "460b337fe117c58653739d3d405690e2e947982d4908df31b9a9e6e47cfb5bea"
+    },
+    "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png": {
+      "size": [
+        96,
+        96
+      ],
+      "sha256": "6ad77f82a1a0aecd71a0ee78ab88e8a933732905060248b89d3a0cd53920c7bf"
+    },
+    "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png": {
+      "size": [
+        144,
+        144
+      ],
+      "sha256": "afa5c90b964bd15b6029faaf71d13ce26f0fd294bcda9fb092ea2c734bbeb32e"
+    },
+    "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": {
+      "size": [
+        192,
+        192
+      ],
+      "sha256": "3137ca66cfc916cbb6904065c0bb580c50ee8769ae2469d1ad77380012669373"
+    },
+    "assets/branding/flutter/vehnora_mark.png": {
+      "size": [
+        64,
+        64
+      ],
+      "sha256": "7e7304d04afe996ef1516f7ccd3fe22bf5b5eefd0d7e594bb879536076f0fe8a"
+    },
+    "assets/branding/flutter/2.0x/vehnora_mark.png": {
+      "size": [
+        128,
+        128
+      ],
+      "sha256": "74a6320100a0ed6186d9c0dab6e17b797f40378a288b10036c88224dc2461274"
+    },
+    "assets/branding/flutter/3.0x/vehnora_mark.png": {
+      "size": [
+        192,
+        192
+      ],
+      "sha256": "ffb2f64d7425c008a9588a6892225b17f820bf995df64f76f65e730578bddaeb"
+    },
+    "assets/branding/android/brand_qa.png": {
+      "size": [
+        960,
+        640
+      ],
+      "sha256": "99a3a00d041a519b7ab67cd9054a635c8f3b63639d24100c7dd2ba783cc0084b"
+    }
+  }
+}

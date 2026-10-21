@@ -1,3 +1,5 @@
+import '../domain/reminder_overview.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -24,6 +26,7 @@ class RemindersScreen extends StatefulWidget {
 class _RemindersScreenState extends State<RemindersScreen> {
   Future<_ReminderBundle>? _remindersFuture;
   String? _loadedVehicleId;
+  int? _loadedRevision;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +45,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
       );
     }
 
-    if (_remindersFuture == null || _loadedVehicleId != vehicle.id) {
+    if (_remindersFuture == null ||
+        _loadedVehicleId != vehicle.id ||
+        _loadedRevision != controller.dataRevision) {
+      _loadedRevision = controller.dataRevision;
       _loadedVehicleId = vehicle.id;
       _remindersFuture = _loadReminders(controller);
     }
@@ -62,7 +68,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
               Text(
                 'Reminders',
                 style: Theme.of(context).textTheme.headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.w900),
+                    ?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: DTSpacing.xs),
               Text(
@@ -96,97 +102,36 @@ class _RemindersScreenState extends State<RemindersScreen> {
                     );
                   }
 
-                  final needsSetup = visible
-                      .where(
-                        (reminder) =>
-                            reminder.nextMileageDue == null &&
-                            reminder.nextDateDue == null,
-                      )
-                      .toList();
-                  final needsAttention = visible
-                      .where(
-                        (reminder) =>
-                            reminder.nextMileageDue != null ||
-                            reminder.nextDateDue != null,
-                      )
-                      .where(
-                        (reminder) =>
-                            reminder.state.severity >=
-                            MaintenanceReminderState.dueSoon.severity,
-                      )
-                      .toList();
-                  final upcoming = visible
-                      .where(
-                        (reminder) =>
-                            reminder.nextMileageDue != null ||
-                            reminder.nextDateDue != null,
-                      )
-                      .where(
-                        (reminder) =>
-                            reminder.state == MaintenanceReminderState.upcoming,
-                      )
-                      .toList();
-                  final allGood = visible
-                      .where(
-                        (reminder) =>
-                            reminder.nextMileageDue != null ||
-                            reminder.nextDateDue != null,
-                      )
-                      .where(
-                        (reminder) =>
-                            reminder.state == MaintenanceReminderState.normal,
-                      )
-                      .toList();
-                  final documentAttention = visibleDocuments
-                      .where(
-                        (reminder) =>
-                            reminder.state.severity >=
-                            MaintenanceReminderState.dueSoon.severity,
-                      )
-                      .toList();
-                  final documentUpcoming = visibleDocuments
-                      .where(
-                        (reminder) =>
-                            reminder.state == MaintenanceReminderState.upcoming,
-                      )
-                      .toList();
-
+                  final ordered = orderReminderOverview(
+                    visible,
+                    visibleDocuments,
+                  );
                   return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _ReminderSection(
-                        title: 'Needs attention',
-                        reminders: needsAttention,
-                        vehicle: vehicle,
-                        onRefresh: _refresh,
-                      ),
-                      _DocumentReminderSection(
-                        title: 'Document attention',
-                        reminders: documentAttention,
-                        onRefresh: _refresh,
-                      ),
-                      _ReminderSection(
-                        title: 'Upcoming',
-                        reminders: upcoming,
-                        vehicle: vehicle,
-                        onRefresh: _refresh,
-                      ),
-                      _DocumentReminderSection(
-                        title: 'Upcoming documents',
-                        reminders: documentUpcoming,
-                        onRefresh: _refresh,
-                      ),
-                      _ReminderSection(
-                        title: 'Needs setup',
-                        reminders: needsSetup,
-                        vehicle: vehicle,
-                        onRefresh: _refresh,
-                      ),
-                      _ReminderSection(
-                        title: 'All good',
-                        reminders: allGood,
-                        vehicle: vehicle,
-                        onRefresh: _refresh,
-                      ),
+                      for (var i = 0; i < ordered.length; i++) ...[
+                        if (i == 0 || ordered[i].state != ordered[i - 1].state)
+                          DTSectionHeader(
+                            title:
+                                ordered[i].state ==
+                                    MaintenanceReminderState.normal
+                                ? 'All good'
+                                : ordered[i].state.label,
+                          ),
+                        if (ordered[i].maintenance != null)
+                          _ReminderSection(
+                            title: '',
+                            reminders: [ordered[i].maintenance!],
+                            vehicle: vehicle,
+                            onRefresh: _refresh,
+                          )
+                        else
+                          _DocumentReminderSection(
+                            title: '',
+                            reminders: [ordered[i].document!],
+                            onRefresh: _refresh,
+                          ),
+                      ],
                     ],
                   );
                 },
@@ -245,7 +190,7 @@ class _ReminderSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DTSectionHeader(title: title),
+        if (title.isNotEmpty) DTSectionHeader(title: title),
         for (final reminder in reminders)
           Padding(
             key: Key('reminder_${reminder.item.id}'),
@@ -258,13 +203,22 @@ class _ReminderSection extends StatelessWidget {
               trailing: _ReminderAction(
                 state: reminder.state,
                 actionKey: Key('recordService_${reminder.item.id}'),
-                icon: Icons.build_circle_outlined,
-                label: 'Record',
+                icon: reminder.item.isExpiry
+                    ? Icons.event_repeat
+                    : Icons.build_circle_outlined,
+                label: reminder.item.isExpiry ? 'Renew' : 'Record',
                 onPressed: () async {
-                  await AppNavigation.openService(
-                    context,
-                    preselectedMaintenanceItemId: reminder.item.id,
-                  );
+                  if (reminder.item.isExpiry) {
+                    await AppNavigation.openEditMaintenanceItem(
+                      context,
+                      reminder.item,
+                    );
+                  } else {
+                    await AppNavigation.openService(
+                      context,
+                      preselectedMaintenanceItemId: reminder.item.id,
+                    );
+                  }
                   await onRefresh();
                 },
               ),
@@ -301,7 +255,7 @@ class _DocumentReminderSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DTSectionHeader(title: title),
+        if (title.isNotEmpty) DTSectionHeader(title: title),
         for (final reminder in reminders)
           Padding(
             key: Key('documentReminder_${reminder.document.id}'),
@@ -380,7 +334,7 @@ class _ReminderAction extends StatelessWidget {
 
 String _reminderSubtitle(MaintenanceReminder reminder, Vehicle vehicle) {
   final parts = <String>[
-    reminder.state.label,
+    reminder.item.isExpiry ? 'Expiry reminder' : reminder.state.label,
     if (reminder.nextMileageDue != null)
       'Due at ${DTFormatters.odometer(reminder.nextMileageDue, vehicle.distanceUnit)}',
     if (reminder.nextDateDue != null) DTFormatters.date(reminder.nextDateDue!),
@@ -444,6 +398,7 @@ IconData _iconForState(MaintenanceReminderState state) {
     MaintenanceReminderState.due => Icons.notification_important_outlined,
     MaintenanceReminderState.dueSoon => Icons.schedule_rounded,
     MaintenanceReminderState.upcoming => Icons.upcoming_rounded,
+    MaintenanceReminderState.setupNeeded => Icons.tune_rounded,
     MaintenanceReminderState.normal => Icons.check_circle_outline_rounded,
   };
 }
@@ -455,6 +410,7 @@ Color _colorForState(BuildContext context, MaintenanceReminderState state) {
     MaintenanceReminderState.due => colors.error,
     MaintenanceReminderState.dueSoon => colors.tertiary,
     MaintenanceReminderState.upcoming => colors.primary,
+    MaintenanceReminderState.setupNeeded => colors.onSurfaceVariant,
     MaintenanceReminderState.normal => colors.onSurfaceVariant,
   };
 }

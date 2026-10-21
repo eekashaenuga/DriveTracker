@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../app/theme/dt_tokens.dart';
+import '../../../core/utilities/formatters.dart';
 import '../../../core/utilities/money.dart';
 import '../../../core/utilities/scaled_decimal.dart';
 import '../../vehicles/domain/vehicle.dart';
@@ -740,8 +741,18 @@ class _TripCostTool extends StatelessWidget {
                 icon: Icons.local_gas_station_rounded,
                 label: 'Fuel required',
                 value: _formatVolume(result!.fuelLitres, FuelVolumeUnit.litres),
-                supportingText:
-                    'Approx. ${_formatCostPerDistance(result!.costMinorPerDistance, distanceUnit)}',
+              ),
+              _ResultCard(
+                key: const Key('tripCostPerDistanceValue'),
+                icon: Icons.route_rounded,
+                label: distanceUnit == DistanceUnit.miles
+                    ? 'Fuel cost per mile'
+                    : 'Fuel cost per kilometre',
+                value: _formatCostPerDistance(
+                  result!.costMinorPerDistance,
+                  distanceUnit,
+                ),
+                supportingText: 'Estimated fuel only',
               ),
             ],
           ),
@@ -1478,8 +1489,7 @@ String _formatVolume(double value, FuelVolumeUnit unit) {
 }
 
 String _formatCostPerDistance(double minorPerDistance, DistanceUnit unit) {
-  final major = minorPerDistance / MoneyAmount.defaultCurrency.minorScale;
-  return '${MoneyAmount.defaultCurrency.symbol}${major.toStringAsFixed(2)}/${unit.shortLabel}';
+  return DTFormatters.costPerDistance(minorPerDistance, unit);
 }
 
 String _formatMicrosPerLitreInput(int microsPerLitre) {

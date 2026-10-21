@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/database/app_database.dart';
+import '../core/product_identity.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
 import '../shared/widgets/dt_empty_state.dart';
 import 'app_controller.dart';
@@ -44,7 +45,7 @@ class _DriveTrackerAppState extends State<DriveTrackerApp> {
       child: Consumer<DriveTrackerController>(
         builder: (context, controller, _) {
           return MaterialApp(
-            title: 'DriveTracker',
+            title: ProductIdentity.name,
             debugShowCheckedModeBanner: false,
             theme: DTTheme.light(),
             darkTheme: DTTheme.dark(),
@@ -63,19 +64,15 @@ class _DriveTrackerBootstrap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<DriveTrackerController>();
-
     if (!controller.initialized) {
       return const _SplashScreen();
     }
-
     if (controller.errorMessage != null && !controller.hasAnyVehicles) {
       return _StartupErrorScreen(message: controller.errorMessage!);
     }
-
     if (!controller.hasAnyVehicles) {
       return const WelcomeScreen();
     }
-
     return const DriveTrackerShell();
   }
 }

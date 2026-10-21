@@ -16,10 +16,10 @@ class DTRadii {
   const DTRadii._();
 
   static const double xs = 6;
-  static const double card = 8;
+  static const double card = 16;
   static const double control = 12;
-  static const double hero = 20;
-  static const double sheet = 24;
+  static const double hero = 28;
+  static const double sheet = 28;
 
   static BorderRadius get smallRadius => BorderRadius.circular(xs);
   static BorderRadius get cardRadius => BorderRadius.circular(card);
@@ -40,6 +40,7 @@ class DTDurations {
 
   static const Duration fast = Duration(milliseconds: 160);
   static const Duration normal = Duration(milliseconds: 240);
+  static const Duration slow = Duration(milliseconds: 420);
 }
 
 class DTAccents {

@@ -26,6 +26,13 @@ void main() {
     expect(find.byKey(const Key('fuelCalculatorScreen')), findsOneWidget);
     expect(
       find.descendant(
+        of: find.byKey(const Key('tripCostPerDistanceValue')),
+        matching: find.text('£0.16/mi'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
         of: find.byKey(const Key('tripEstimatedCostValue')),
         matching: find.text('£16.48'),
       ),
