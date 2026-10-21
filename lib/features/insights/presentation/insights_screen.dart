@@ -40,6 +40,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _vehicleId = controller.selectedVehicle?.id;
     }
 
+    // Keep the query aligned with the selector after archive or restore.
+    if (_vehicleId != null && !vehicles.any((v) => v.id == _vehicleId)) {
+      _vehicleId = null;
+      _selectedBucketIndex = null;
+      _selectedBreakdownKey = null;
+    }
+
     if (vehicles.isEmpty) {
       return const Scaffold(
         body: SafeArea(
@@ -186,6 +193,7 @@ class _InsightsBody extends StatelessWidget {
       ),
       children: [
         _Header(
+          key: ValueKey(selectedVehicleId),
           vehicles: vehicles,
           selectedVehicleId: selectedVehicleId,
           range: range,
@@ -293,6 +301,7 @@ class _InsightsBody extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   const _Header({
+    super.key,
     required this.vehicles,
     required this.selectedVehicleId,
     required this.range,
