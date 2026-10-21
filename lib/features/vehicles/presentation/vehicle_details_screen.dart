@@ -5,7 +5,6 @@ import '../../../app/app_controller.dart';
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
 import '../../../core/utilities/formatters.dart';
-import '../../../core/utilities/money.dart';
 import '../../../core/utilities/validation_exception.dart';
 import '../../../shared/widgets/dt_activity_row.dart';
 import '../../../shared/widgets/dt_metric_card.dart';
@@ -235,8 +234,8 @@ class _ProfileRows extends StatelessWidget {
         ),
       if (vehicle.purchasePrice != null)
         _ProfileRowData(
-          'Purchase price',
-          '${MoneyAmount.defaultCurrency.symbol}${vehicle.purchasePrice!.toStringAsFixed(2)}',
+          'Acquisition cost',
+          DTFormatters.moneyMinor(vehicle.acquisitionCostMinor),
         ),
       if (vehicle.seller != null) _ProfileRowData('Seller', vehicle.seller!),
       if (vehicle.notes != null) _ProfileRowData('Notes', vehicle.notes!),

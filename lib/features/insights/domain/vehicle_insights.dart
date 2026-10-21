@@ -1,9 +1,13 @@
 import '../../../core/calculations/analytics_date_range.dart';
+import '../../../core/calculations/cost_per_distance.dart';
 import '../../daily_records/domain/daily_activity.dart';
 import '../../vehicles/domain/vehicle.dart';
 
 class VehicleInsights {
   const VehicleInsights({
+    this.acquisitionCostMinor = 0,
+    this.acquisitionCount = 0,
+    this.undatedAcquisitionCount = 0,
     required this.scope,
     required this.range,
     required this.fuelSpendMinor,
@@ -20,6 +24,11 @@ class VehicleInsights {
     required this.fuelPriceTrend,
     required this.odometerTrend,
   });
+
+  final int acquisitionCostMinor;
+  final int acquisitionCount;
+  final int undatedAcquisitionCount;
+  int get ownershipSpendMinor => totalSpendMinor + acquisitionCostMinor;
 
   final InsightScope scope;
   final ResolvedAnalyticsRange range;
@@ -43,7 +52,9 @@ class VehicleInsights {
   bool get hasExpenditure => totalSpendMinor > 0;
   bool get hasIncome => incomeMinor > 0;
   bool get hasAnyData {
-    return hasExpenditure ||
+    return acquisitionCount > 0 ||
+        undatedAcquisitionCount > 0 ||
+        hasExpenditure ||
         hasIncome ||
         distance.value != null ||
         averageFuelEconomy.ukMpg != null ||
@@ -51,12 +62,20 @@ class VehicleInsights {
         odometerTrend.isNotEmpty;
   }
 
+  double? get fuelCostMinorPerDistance => CostPerDistance.calculate(
+    costMinor: fuelSpendMinor,
+    distance: distance.value ?? 0,
+  );
+
   double? get runningCostMinorPerDistance {
     final value = distance.value;
     if (value == null || value <= 0) {
       return null;
     }
-    return runningSpendMinor / value;
+    return CostPerDistance.calculate(
+      costMinor: runningSpendMinor,
+      distance: value,
+    );
   }
 
   double? get totalCostMinorPerDistance {
@@ -64,7 +83,10 @@ class VehicleInsights {
     if (value == null || value <= 0) {
       return null;
     }
-    return totalSpendMinor / value;
+    return CostPerDistance.calculate(
+      costMinor: totalSpendMinor,
+      distance: value,
+    );
   }
 }
 

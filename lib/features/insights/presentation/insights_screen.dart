@@ -103,6 +103,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   void _ensureFuture(DriveTrackerController controller) {
     final signature = [
+      controller.dataRevision.toString(),
       _vehicleId ?? 'all',
       _range.preset.name,
       _range.customStart?.toIso8601String() ?? '',
@@ -440,6 +441,24 @@ class _SummaryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final metrics = <_MetricData>[
       _MetricData(
+        key: const Key('insightsAcquisitionMetric'),
+        label: 'Acquisition cost',
+        value: insights.acquisitionCount == 0
+            ? 'Not recorded in range'
+            : DTFormatters.moneyMinor(insights.acquisitionCostMinor),
+        supporting: insights.undatedAcquisitionCount > 0
+            ? 'From vehicle purchase prices. Undated purchases count only in All time.'
+            : 'Vehicle purchase prices in this range; separate from operating spend.',
+        icon: Icons.directions_car_outlined,
+      ),
+      _MetricData(
+        key: const Key('insightsOwnershipMetric'),
+        label: 'Total ownership spend',
+        value: DTFormatters.moneyMinor(insights.ownershipSpendMinor),
+        supporting: 'Operating spend + recorded acquisition in this range. Income is not deducted; unrecorded purchases are excluded.',
+        icon: Icons.account_balance_wallet_outlined,
+      ),
+      _MetricData(
         key: const Key('insightsDistanceMetric'),
         label: 'Distance',
         value: _distanceValue(insights.distance),
@@ -452,6 +471,16 @@ class _SummaryPanel extends StatelessWidget {
         value: DTFormatters.ukMpg(insights.averageFuelEconomy.ukMpg),
         supporting: insights.averageFuelEconomy.unavailableReason,
         icon: Icons.local_gas_station_rounded,
+      ),
+      _MetricData(
+        key: const Key('insightsFuelCostPerDistanceMetric'),
+        label: 'Fuel cost',
+        value: DTFormatters.costPerDistance(
+          insights.fuelCostMinorPerDistance,
+          insights.scope.distanceUnit,
+        ),
+        supporting: 'Recorded fuel spend per distance in this range; calculator uses an estimate.',
+        icon: Icons.local_gas_station_outlined,
       ),
       _MetricData(
         key: const Key('insightsCostPerDistanceMetric'),
@@ -517,10 +546,7 @@ class _SummaryPanel extends StatelessWidget {
   }
 
   String _costPerDistance(double? minorPerDistance, DistanceUnit? unit) {
-    if (minorPerDistance == null || unit == null) {
-      return 'Unavailable';
-    }
-    return '${MoneyAmount.formatMinor(minorPerDistance.round())}/${unit.shortLabel}';
+    return DTFormatters.costPerDistance(minorPerDistance, unit);
   }
 }
 
@@ -549,7 +575,7 @@ class _PrimarySpendCard extends StatelessWidget {
               const SizedBox(width: DTSpacing.sm),
               Expanded(
                 child: Text(
-                  'Total spend',
+                  'Operating spend',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelLarge?.copyWith(
@@ -729,7 +755,7 @@ class _CompactMetricCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   data.label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: colors.onSurfaceVariant,

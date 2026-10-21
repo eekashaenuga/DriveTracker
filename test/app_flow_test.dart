@@ -1641,7 +1641,16 @@ void main() {
           'cat_income_rideshare',
         );
         vehicle = await services.vehicleService.addVehicle(
-          _draft('Commuter', 64000),
+          VehicleDraft(
+            name: 'Commuter',
+            make: 'Ford',
+            model: 'Focus',
+            fuelType: FuelType.petrol,
+            distanceUnit: DistanceUnit.miles,
+            currentOdometer: 64000,
+            purchasePrice: 3000,
+            purchaseDate: DateTime(2026, 9, 1),
+          ),
         );
         await services.refuelService.createRefuel(
           _refuelDraft(
@@ -1685,7 +1694,7 @@ void main() {
         );
       });
 
-      await _pumpApp(
+      final controller = await _pumpApp(
         tester,
         services,
         find.byKey(const Key('mainActionButton')),
@@ -1708,6 +1717,50 @@ void main() {
         find.descendant(
           of: find.byKey(const Key('insightsDistanceMetric')),
           matching: find.text('600 mi'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('insightsAcquisitionMetric')),
+          matching: find.text('£3000.00'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('insightsOwnershipMetric')),
+          matching: find.text('£3152.00'),
+        ),
+        findsOneWidget,
+      );
+      for (final price in <double?>[2800, null]) {
+        await tester.runAsync(
+          () => controller.updateVehicle(
+            vehicle.id,
+            VehicleDraft(
+              name: vehicle.name,
+              make: vehicle.make,
+              model: vehicle.model,
+              fuelType: vehicle.fuelType,
+              distanceUnit: vehicle.distanceUnit,
+              purchaseDate: vehicle.purchaseDate,
+              purchasePrice: price,
+            ),
+          ),
+        );
+        await _pumpUntilFound(
+          tester,
+          find.descendant(
+            of: find.byKey(const Key('insightsOwnershipMetric')),
+            matching: find.text(price == null ? '£152.00' : '£2952.00'),
+          ),
+        );
+      }
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('insightsAcquisitionMetric')),
+          matching: find.text('Not recorded in range'),
         ),
         findsOneWidget,
       );

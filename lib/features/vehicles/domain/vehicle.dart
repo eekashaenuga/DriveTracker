@@ -1,3 +1,5 @@
+import '../../../core/utilities/money.dart';
+
 enum FuelType {
   petrol('Petrol', 'PETROL'),
   diesel('Diesel', 'DIESEL'),
@@ -85,6 +87,13 @@ class Vehicle {
   final bool isArchived;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// Derived only; purchase_price remains the canonical persisted value.
+  int? get acquisitionCostMinor {
+    final price = purchasePrice;
+    if (price == null || !price.isFinite || price < 0) return null;
+    return MoneyAmount.parseMinor(price.toString());
+  }
 
   String get description {
     final details = <String>[if (year != null) year.toString(), make, model];

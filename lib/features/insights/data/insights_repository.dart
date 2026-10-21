@@ -24,11 +24,12 @@ class InsightsRepository {
     final db = await _executor(executor);
     final scope = await _scope(db, vehicleId);
     final selectedVehicle = scope.vehicle;
-    final vehicleIds = scope.isAllVehicles
-        ? (await _activeVehicles(db)).map((vehicle) => vehicle.id).toList()
+    final vehicles = scope.isAllVehicles
+        ? await _activeVehicles(db)
         : selectedVehicle == null
-        ? const <String>[]
-        : [selectedVehicle.id];
+        ? <Vehicle>[]
+        : [selectedVehicle];
+    final vehicleIds = vehicles.map((vehicle) => vehicle.id).toList();
     final resolvedRange = range.resolve(now ?? DateTime.now());
 
     final refuels = await _refuels(
@@ -90,7 +91,23 @@ class InsightsRepository {
       income: income,
     );
 
+    final acquisitions = vehicles.where(
+      (vehicle) =>
+          vehicle.acquisitionCostMinor != null &&
+          (resolvedRange.preset == AnalyticsRangePreset.all ||
+              (vehicle.purchaseDate != null &&
+                  resolvedRange.contains(vehicle.purchaseDate!))),
+    );
     return VehicleInsights(
+      acquisitionCostMinor: _sum(
+        acquisitions.map((v) => v.acquisitionCostMinor!),
+      ),
+      acquisitionCount: acquisitions.length,
+      undatedAcquisitionCount: vehicles
+          .where(
+            (v) => v.acquisitionCostMinor != null && v.purchaseDate == null,
+          )
+          .length,
       scope: scope,
       range: resolvedRange,
       fuelSpendMinor: fuelSpend,

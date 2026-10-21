@@ -316,6 +316,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                     ],
                     decoration: InputDecoration(
                       labelText: 'Purchase price',
+                      helperText: 'Optional acquisition cost, separate from running costs.',
                       prefixText: currencySymbol,
                     ),
                     validator: _validateOptionalNonNegativeDouble,
