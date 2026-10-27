@@ -1,3 +1,6 @@
+import 'income_earnings_details.dart';
+import '../domain/income.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -35,6 +38,7 @@ class _RecordDetailsScreenState extends State<RecordDetailsScreen> {
 
   Future<_RecordDetails?> _load() async {
     final c = context.read<DriveTrackerController>();
+    Income? income;
     String vehicleId;
     DateTime date;
     int? odometer;
@@ -88,6 +92,7 @@ class _RecordDetailsScreenState extends State<RecordDetailsScreen> {
       case DailyActivityType.income:
         final r = await c.incomeById(widget.recordId);
         if (r == null) return null;
+        income = r;
         vehicleId = r.vehicleId;
         date = r.eventDateTime;
         odometer = r.odometer;
@@ -162,6 +167,8 @@ class _RecordDetailsScreenState extends State<RecordDetailsScreen> {
         : DTFormatters.odometer(odometer, unit);
     if (widget.type == DailyActivityType.odometer) primary = reading;
     return _RecordDetails(
+      income: income,
+      unit: unit,
       primary: primary,
       notes: notes,
       parent: parent,
@@ -272,6 +279,11 @@ class _RecordDetailsScreenState extends State<RecordDetailsScreen> {
                           ],
                         ),
                       ),
+                      if (data.income != null)
+                        IncomeEarningsDetails(
+                          income: data.income!,
+                          unit: data.unit,
+                        ),
                       if (data.notes != null && data.notes!.isNotEmpty) ...[
                         const SizedBox(height: 24),
                         Text(
@@ -301,12 +313,16 @@ class _RecordDetailsScreenState extends State<RecordDetailsScreen> {
 
 class _RecordDetails {
   const _RecordDetails({
+    this.income,
+    this.unit = DistanceUnit.miles,
     required this.primary,
     required this.fields,
     this.notes,
     this.parent,
     this.edit,
   });
+  final Income? income;
+  final DistanceUnit unit;
   final String primary;
   final List<(String, String)> fields;
   final String? notes;

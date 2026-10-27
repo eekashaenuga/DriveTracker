@@ -13,6 +13,7 @@ import '../data/category_repository.dart';
 import '../data/income_repository.dart';
 import 'daily_record_validation.dart';
 import 'income.dart';
+import 'expense.dart';
 import 'record_category.dart';
 
 typedef Clock = DateTime Function();
@@ -60,6 +61,7 @@ class IncomeService {
       eventDateTime: draft.eventDateTime.toUtc(),
       odometer: draft.odometer,
       amountMinor: draft.amountMinor,
+      activity: draft.activity,
       source: DailyRecordValidation.cleanOptional(draft.source),
       notes: DailyRecordValidation.cleanOptional(draft.notes),
       createdAt: now,
@@ -69,6 +71,7 @@ class IncomeService {
     await database.transaction((txn) async {
       await incomeRepository.insert(income, executor: txn);
       await _syncLinkedOdometer(income, now, executor: txn);
+      await _saveCosts(income, draft, now, txn);
     });
     return income;
   }
@@ -98,6 +101,7 @@ class IncomeService {
       eventDateTime: draft.eventDateTime.toUtc(),
       odometer: draft.odometer,
       amountMinor: draft.amountMinor,
+      activity: draft.activity,
       source: DailyRecordValidation.cleanOptional(draft.source),
       notes: DailyRecordValidation.cleanOptional(draft.notes),
       createdAt: existing.createdAt,
@@ -107,8 +111,80 @@ class IncomeService {
     await database.transaction((txn) async {
       await incomeRepository.update(updated, executor: txn);
       await _syncLinkedOdometer(updated, now, executor: txn);
+      await _saveCosts(updated, draft, now, txn);
     });
     return updated;
+  }
+
+  Future<void> _saveCosts(
+    Income income,
+    IncomeDraft draft,
+    DateTime now,
+    sqflite.DatabaseExecutor txn,
+  ) async {
+    final existing = await txn.query(
+      'income_activity_expenses',
+      where: 'income_id=?',
+      whereArgs: [income.id],
+    );
+    final ids =
+        draft.linkedExpenseIds ??
+        existing.map((r) => r['expense_id'] as String).toList();
+    if (ids.toSet().length != ids.length) {
+      throw const ValidationException(['An expense can only be linked once.']);
+    }
+    if (income.activity.type.name == 'simple' &&
+        (ids.isNotEmpty || draft.newDirectExpenses.isNotEmpty)) {
+      throw const ValidationException([
+        'Choose an activity template before linking direct costs.',
+      ]);
+    }
+    for (final id in ids) {
+      final rows = await txn.rawQuery(
+        'SELECT e.vehicle_id,l.income_id FROM expenses e LEFT JOIN income_activity_expenses l ON l.expense_id=e.id WHERE e.id=?',
+        [id],
+      );
+      if (rows.isEmpty ||
+          rows.single['vehicle_id'] != income.vehicleId ||
+          (rows.single['income_id'] != null &&
+              rows.single['income_id'] != income.id)) {
+        throw const ValidationException([
+          'Select an unassigned expense from the same vehicle.',
+        ]);
+      }
+    }
+    final allIds = [...ids];
+    for (final draftExpense in draft.newDirectExpenses) {
+      // Canonical expense and relationship are committed with the income, never separately.
+      final expense = Expense(
+        id: _idGenerator.newId('expense'),
+        vehicleId: income.vehicleId,
+        categoryId: draftExpense.categoryId,
+        eventDateTime: draftExpense.eventDateTime.toUtc(),
+        amountMinor: draftExpense.amountMinor,
+        merchant: DailyRecordValidation.cleanOptional(draftExpense.merchant),
+        notes: DailyRecordValidation.cleanOptional(draftExpense.notes),
+        paymentMethod: DailyRecordValidation.cleanOptional(
+          draftExpense.paymentMethod,
+        ),
+        createdAt: now,
+        updatedAt: now,
+      );
+      await txn.insert('expenses', expense.toMap());
+      allIds.add(expense.id);
+    }
+    await txn.delete(
+      'income_activity_expenses',
+      where: 'income_id=?',
+      whereArgs: [income.id],
+    );
+    for (final id in allIds) {
+      await txn.insert('income_activity_expenses', {
+        'income_id': income.id,
+        'expense_id': id,
+        'created_at': now.toIso8601String(),
+      });
+    }
   }
 
   Future<void> deleteIncome(String incomeId) async {
@@ -147,6 +223,23 @@ class IncomeService {
       originalCategoryId: originalCategoryId,
     );
     DailyRecordValidation.requirePositiveMoney(draft.amountMinor, 'Amount');
+    draft.activity.validate(draft.amountMinor);
+    for (final expense in draft.newDirectExpenses) {
+      if (expense.vehicleId != draft.vehicleId || expense.odometer != null) {
+        throw const ValidationException([
+          'Direct expenses must use this vehicle and cannot add an odometer reading here.',
+        ]);
+      }
+      DailyRecordValidation.requirePositiveMoney(
+        expense.amountMinor,
+        'Direct expense',
+      );
+      await DailyRecordValidation.requireCategory(
+        repository: categoryRepository,
+        categoryId: expense.categoryId,
+        type: RecordCategoryType.expense,
+      );
+    }
     DailyRecordValidation.requireOptionalOdometer(draft.odometer);
     await _assessOptionalOdometer(
       draft.vehicleId,

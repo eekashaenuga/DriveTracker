@@ -1,21 +1,30 @@
+import 'income_activity.dart';
+import 'expense.dart';
+
 class IncomeDraft {
   const IncomeDraft({
     required this.vehicleId,
     required this.categoryId,
     required this.eventDateTime,
     required this.amountMinor,
+    this.activity = const IncomeActivity(),
     this.odometer,
     this.source,
     this.notes,
+    this.linkedExpenseIds,
+    this.newDirectExpenses = const [],
   });
 
   final String vehicleId;
   final String categoryId;
   final DateTime eventDateTime;
   final int amountMinor;
+  final IncomeActivity activity;
   final int? odometer;
   final String? source;
   final String? notes;
+  final List<String>? linkedExpenseIds;
+  final List<ExpenseDraft> newDirectExpenses;
 }
 
 class Income {
@@ -27,6 +36,7 @@ class Income {
     required this.amountMinor,
     required this.createdAt,
     required this.updatedAt,
+    this.activity = const IncomeActivity(),
     this.odometer,
     this.source,
     this.notes,
@@ -36,6 +46,7 @@ class Income {
   final String vehicleId;
   final String categoryId;
   final DateTime eventDateTime;
+  final IncomeActivity activity;
   final int? odometer;
   final int amountMinor;
   final String? source;
@@ -45,6 +56,7 @@ class Income {
 
   Map<String, Object?> toMap() {
     return {
+      ...activity.toMap(),
       'id': id,
       'vehicle_id': vehicleId,
       'category_id': categoryId,
@@ -60,6 +72,7 @@ class Income {
 
   factory Income.fromMap(Map<String, Object?> map) {
     return Income(
+      activity: IncomeActivity.fromMap(map),
       id: map['id'] as String,
       vehicleId: map['vehicle_id'] as String,
       categoryId: map['category_id'] as String,

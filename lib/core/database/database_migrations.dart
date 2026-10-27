@@ -3,7 +3,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 class DatabaseMigrations {
   const DatabaseMigrations._();
 
-  static const schemaVersion = 5;
+  static const schemaVersion = 6;
 
   static const _allTables = [
     'vehicles',
@@ -18,9 +18,11 @@ class DatabaseMigrations {
     'service_items',
     'documents',
     'attachments',
+    'income_activity_expenses',
   ];
 
   static const _requiredColumnsByTable = <String, List<String>>{
+    'income_activity_expenses': ['income_id', 'expense_id', 'created_at'],
     'vehicles': [
       'id',
       'name',
@@ -199,8 +201,9 @@ class DatabaseMigrations {
 
   static List<String> requiredTablesFor(int version) {
     _checkSupportedVersion(version);
+    if (version >= 6) return _allTables;
     if (version >= 4) {
-      return _allTables;
+      return _allTables.take(12).toList();
     }
     if (version == 3) {
       return _allTables.take(10).toList();
@@ -214,7 +217,10 @@ class DatabaseMigrations {
   static List<String> requiredIndexesFor(int version) {
     _checkSupportedVersion(version);
     if (version >= 4) {
-      return _allIndexes;
+      return [
+        ..._allIndexes,
+        if (version >= 6) 'idx_income_activity_expenses_income',
+      ];
     }
     if (version == 3) {
       return _allIndexes.take(17).toList();
@@ -299,6 +305,7 @@ class DatabaseMigrations {
     if (version >= 5) {
       await _createV5(db);
     }
+    if (version >= 6) await _createV6(db);
   }
 
   static Future<void> migrate(
@@ -319,6 +326,9 @@ class DatabaseMigrations {
           break;
         case 5:
           await _createV5(db);
+          break;
+        case 6:
+          await _createV6(db);
           break;
         default:
           throw StateError(
@@ -716,6 +726,73 @@ class DatabaseMigrations {
     );
   }
 
+  static Future<void> _createV6(sqflite.DatabaseExecutor db) async {
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN activity_type TEXT NOT NULL DEFAULT 'simple' CHECK (activity_type IN ('simple','rideshare','delivery','work','reimbursement'))",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN base_amount_minor INTEGER CHECK (base_amount_minor IS NULL OR base_amount_minor >= 0)",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN tips_minor INTEGER CHECK (tips_minor IS NULL OR tips_minor >= 0)",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN travel_compensation_minor INTEGER CHECK (travel_compensation_minor IS NULL OR travel_compensation_minor >= 0)",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN other_income_minor INTEGER CHECK (other_income_minor IS NULL OR other_income_minor >= 0)",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN activity_distance_mm INTEGER CHECK (activity_distance_mm IS NULL OR activity_distance_mm > 0)",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN duration_minutes INTEGER CHECK (duration_minutes IS NULL OR duration_minutes > 0)",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN delivery_count INTEGER CHECK (delivery_count IS NULL OR delivery_count > 0)",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN reimbursement_rate_micros INTEGER CHECK (reimbursement_rate_micros IS NULL OR reimbursement_rate_micros > 0)",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN reimbursement_rate_unit TEXT CHECK (reimbursement_rate_unit IS NULL OR reimbursement_rate_unit IN ('MILES','KILOMETERS'))",
+    );
+    await db.execute(
+      "ALTER TABLE income_records ADD COLUMN direct_costs_complete INTEGER NOT NULL DEFAULT 0 CHECK (direct_costs_complete IN (0,1))",
+    );
+    await db.execute('''
+      CREATE TABLE income_activity_expenses (
+        income_id TEXT NOT NULL REFERENCES income_records(id) ON DELETE CASCADE,
+        expense_id TEXT NOT NULL PRIMARY KEY REFERENCES expenses(id) ON DELETE RESTRICT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX idx_income_activity_expenses_income ON income_activity_expenses(income_id)',
+    );
+    await db.execute(
+      "CREATE TRIGGER income_activity_vehicle_insert BEFORE INSERT ON income_activity_expenses WHEN (SELECT vehicle_id FROM income_records WHERE id=NEW.income_id) != (SELECT vehicle_id FROM expenses WHERE id=NEW.expense_id) BEGIN SELECT RAISE(ABORT, 'Activity expenses must belong to the same vehicle'); END",
+    );
+    await db.execute(
+      "CREATE TRIGGER income_activity_vehicle_update BEFORE UPDATE ON income_activity_expenses WHEN (SELECT vehicle_id FROM income_records WHERE id=NEW.income_id) != (SELECT vehicle_id FROM expenses WHERE id=NEW.expense_id) BEGIN SELECT RAISE(ABORT, 'Activity expenses must belong to the same vehicle'); END",
+    );
+    for (final table in ['income_records', 'expenses']) {
+      final idColumn = table == 'income_records' ? 'income_id' : 'expense_id';
+      final otherTable = table == 'income_records'
+          ? 'expenses'
+          : 'income_records';
+      final otherId = table == 'income_records' ? 'expense_id' : 'income_id';
+      await db.execute(
+        "CREATE TRIGGER ${table}_activity_vehicle BEFORE UPDATE OF vehicle_id ON $table WHEN EXISTS (SELECT 1 FROM income_activity_expenses l JOIN $otherTable o ON o.id=l.$otherId WHERE l.$idColumn=OLD.id AND o.vehicle_id != NEW.vehicle_id) BEGIN SELECT RAISE(ABORT, 'Unlink activity expenses before changing vehicle'); END",
+      );
+    }
+    for (final operation in ['INSERT', 'UPDATE']) {
+      await db.execute(
+        "CREATE TRIGGER income_breakdown_${operation.toLowerCase()} BEFORE $operation ON income_records WHEN NOT ((NEW.base_amount_minor IS NULL AND NEW.tips_minor IS NULL AND NEW.travel_compensation_minor IS NULL AND NEW.other_income_minor IS NULL) OR (NEW.base_amount_minor IS NOT NULL AND NEW.tips_minor IS NOT NULL AND NEW.travel_compensation_minor IS NOT NULL AND NEW.other_income_minor IS NOT NULL AND NEW.base_amount_minor+NEW.tips_minor+NEW.travel_compensation_minor+NEW.other_income_minor=NEW.amount_minor)) BEGIN SELECT RAISE(ABORT, 'Income breakdown must equal gross received'); END",
+      );
+    }
+  }
+
   static Future<void> _validateColumns(
     sqflite.DatabaseExecutor db,
     String table,
@@ -733,6 +810,19 @@ class DatabaseMigrations {
               'reminder_schedule',
             ],
             if (version >= 5 && table == 'documents') 'reminder_schedule',
+            if (version >= 6 && table == 'income_records') ...[
+              'activity_type',
+              'base_amount_minor',
+              'tips_minor',
+              'travel_compensation_minor',
+              'other_income_minor',
+              'activity_distance_mm',
+              'duration_minutes',
+              'delivery_count',
+              'reimbursement_rate_micros',
+              'reimbursement_rate_unit',
+              'direct_costs_complete',
+            ],
           ];
     if (expectedColumns == null) {
       throw StateError('No schema column contract registered for "$table".');

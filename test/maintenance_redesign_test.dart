@@ -85,7 +85,7 @@ void main() {
 
   for (final populated in [false, true]) {
     test(
-      'V4 to V5 migration preserves ${populated ? 'representative linked records' : 'an empty database'}',
+      'V4 through V5 to current migration preserves ${populated ? 'representative linked records' : 'an empty database'}',
       () async {
         final dir = await Directory.systemTemp.createTemp('vehnora_v4_');
         addTearDown(() => dir.delete(recursive: true));
@@ -103,7 +103,10 @@ void main() {
         );
         try {
           final db = await database.database;
-          expect(await DatabaseMigrations.validateSchema(db), 5);
+          expect(
+            await DatabaseMigrations.validateSchema(db),
+            DatabaseMigrations.schemaVersion,
+          );
           for (final table in before.keys) {
             final after = await db.query(table);
             expect(after.length, before[table]!.length);
@@ -212,7 +215,10 @@ void main() {
       4,
     );
     await safety.restoreBackupFromFile(backup.path);
-    expect(await (await services.database.database).getVersion(), 5);
+    expect(
+      await (await services.database.database).getVersion(),
+      DatabaseMigrations.schemaVersion,
+    );
     expect(
       (await services.vehicles.listActive()).single.name,
       'Existing Fiesta',

@@ -102,7 +102,7 @@ void main() {
     controller.dispose();
   });
 
-  test('V5 format-1 backup preserves combined V1.1 data and rebuildable schedules after reopen', () async {
+  test('Current-schema format-1 backup preserves combined V1.1 data and rebuildable schedules after reopen', () async {
     final source = createTestServices();
     final vehicle = await source.vehicleService.addVehicle(
       _draft('Owned vehicle', 3000.55),
@@ -178,7 +178,9 @@ void main() {
     }
     final before = <String, List<Map<String, Object?>>>{};
     final db = await source.database.database;
-    for (final table in DatabaseMigrations.requiredTablesFor(5)) {
+    for (final table in DatabaseMigrations.requiredTablesFor(
+      DatabaseMigrations.schemaVersion,
+    )) {
       before[table] = await db.query(table);
     }
     DataSafetyService safety(TestServices s) =>
@@ -187,14 +189,14 @@ void main() {
     expect(backup.file.path, endsWith('.dtbackup'));
     final inspected = await safety(source).inspectBackupFile(backup.file.path);
     expect(inspected.manifest.backupFormatVersion, 1);
-    expect(inspected.manifest.schemaVersion, 5);
+    expect(inspected.manifest.schemaVersion, DatabaseMigrations.schemaVersion);
     expect(inspected.manifest.attachments, hasLength(2));
     final target = createTestServices();
     await safety(target).restoreBackupFromFile(backup.file.path);
     await target.database.close();
     final reopened = await target.database.database;
     expect(await reopened.rawQuery('PRAGMA user_version'), [
-      {'user_version': 5},
+      {'user_version': DatabaseMigrations.schemaVersion},
     ]);
     expect(await reopened.rawQuery('PRAGMA integrity_check'), [
       {'integrity_check': 'ok'},

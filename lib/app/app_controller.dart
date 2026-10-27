@@ -1,3 +1,6 @@
+import '../features/daily_records/data/income_activity_expense_repository.dart';
+import '../features/daily_records/domain/income_earnings.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -375,6 +378,15 @@ class DriveTrackerController extends ChangeNotifier {
 
   Future<Refuel?> refuelById(String id) => _refuelRepository.getById(id);
   Future<Expense?> expenseById(String id) => _expenseRepository.getById(id);
+  Future<List<Expense>> incomeExpenseChoices(
+    String vehicleId,
+    String? incomeId,
+  ) =>
+      IncomeActivityExpenseRepository(_database).available(vehicleId, incomeId);
+  Future<List<Expense>> incomeExpenses(String incomeId) =>
+      IncomeActivityExpenseRepository(_database).linked(incomeId);
+  Future<IncomeEarnings> incomeEarnings(Income income) =>
+      IncomeActivityExpenseRepository(_database).earnings(income);
   Future<Income?> incomeById(String id) => _incomeRepository.getById(id);
   Future<MaintenanceItem?> maintenanceItemById(String id) {
     return _maintenanceItemRepository.getById(id);

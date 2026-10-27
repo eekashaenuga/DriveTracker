@@ -424,9 +424,24 @@ class _ExpenseFormScreenState extends State<ExpenseFormScreen> {
     if (confirmed != true || !mounted) {
       return;
     }
-    await context.read<DriveTrackerController>().deleteExpense(
-      widget.expense!.id,
-    );
+    try {
+      await context.read<DriveTrackerController>().deleteExpense(
+        widget.expense!.id,
+      );
+    } on ValidationException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete expense.')),
+        );
+      }
+      return;
+    }
     if (!mounted) {
       return;
     }

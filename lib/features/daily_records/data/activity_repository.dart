@@ -1,3 +1,5 @@
+import '../domain/income_activity.dart';
+
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../../../core/calculations/analytics_date_range.dart';
@@ -217,7 +219,14 @@ class ActivityRepository {
           eventDateTime: DateTime.parse(row['event_datetime'] as String),
           createdAt: DateTime.parse(row['created_at'] as String),
           title: row['category_name'] as String,
-          subtitle: _join([row['source'] as String?, 'Income']),
+          subtitle: _join([
+            row['source'] as String?,
+            IncomeActivity.fromMap(row).type == IncomeActivityType.simple
+                ? 'Income'
+                : IncomeActivity.fromMap(row).type.label,
+            if (row['duration_minutes'] != null)
+              '${row['duration_minutes']} min',
+          ]),
           amountMinor: row['amount_minor'] as int,
           odometer: row['odometer'] as int?,
           vehicleName: row['vehicle_name'] as String,

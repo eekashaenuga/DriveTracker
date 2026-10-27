@@ -1,3 +1,6 @@
+import 'income_activity_fields.dart';
+import '../domain/expense.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -30,6 +33,7 @@ class IncomeFormScreen extends StatefulWidget {
 }
 
 class _IncomeFormScreenState extends State<IncomeFormScreen> {
+  final _activityKey = GlobalKey<IncomeActivityFieldsState>();
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _odometerController = TextEditingController();
@@ -41,6 +45,7 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
   late DateTime _eventDateTime;
   Future<List<RecordCategory>>? _categoriesFuture;
   String? _formError;
+  bool _saving = false;
   bool _didDefaultFromController = false;
   int? _lastOdometer;
 
@@ -115,7 +120,7 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
               if (_isEditing) ...[
                 IconButton.filledTonal(
                   tooltip: 'Delete income',
-                  onPressed: controller.isBusy ? null : _delete,
+                  onPressed: (controller.isBusy || _saving) ? null : _delete,
                   icon: const Icon(Icons.delete_outline_rounded),
                 ),
                 const SizedBox(width: DTSpacing.md),
@@ -125,8 +130,10 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
                   key: const Key('saveIncomeButton'),
                   label: 'Save income',
                   icon: Icons.check_rounded,
-                  isLoading: controller.isBusy,
-                  onPressed: controller.isBusy ? null : () => _save(),
+                  isLoading: controller.isBusy || _saving,
+                  onPressed: (controller.isBusy || _saving)
+                      ? null
+                      : () => _save(),
                 ),
               ),
             ],
@@ -136,184 +143,198 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
       body: SafeArea(
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(DTSpacing.lg),
-            children: [
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                key: const Key('incomeVehicleField'),
-                initialValue: selectedVehicle?.id,
-                decoration: const InputDecoration(labelText: 'Vehicle'),
-                items: [
-                  for (final vehicle in vehicles)
-                    DropdownMenuItem(
-                      value: vehicle.id,
-                      child: Text(
-                        vehicle.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                validator: (value) =>
-                    value == null ? 'Select a vehicle.' : null,
-                onChanged: _isEditing
-                    ? null
-                    : (value) async {
-                        setState(() => _vehicleId = value);
-                        if (value == null) {
-                          return;
-                        }
-                        final odometer = await context
-                            .read<DriveTrackerController>()
-                            .currentOdometerForVehicle(value);
-                        if (mounted) {
-                          setState(() => _lastOdometer = odometer);
-                        }
-                      },
-              ),
-              const SizedBox(height: DTSpacing.md),
-              FutureBuilder<List<RecordCategory>>(
-                future: _categoriesFuture,
-                builder: (context, snapshot) {
-                  final categories = snapshot.data ?? const <RecordCategory>[];
-                  if (snapshot.connectionState != ConnectionState.done &&
-                      categories.isEmpty) {
-                    return const LinearProgressIndicator();
-                  }
-                  if (_categoryId == null && categories.isNotEmpty) {
-                    _categoryId = categories.first.id;
-                  }
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          key: const Key('incomeCategoryField'),
-                          child: DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            key: ValueKey<String>(
-                              'income-category-${_categoryId ?? 'none'}-${categories.length}',
-                            ),
-                            initialValue:
-                                categories.any(
-                                  (category) => category.id == _categoryId,
-                                )
-                                ? _categoryId
-                                : null,
-                            decoration: const InputDecoration(
-                              labelText: 'Category',
-                            ),
-                            items: [
-                              for (final category in categories)
-                                DropdownMenuItem(
-                                  value: category.id,
-                                  child: Text(
-                                    '${category.name}${category.isArchived ? ' (archived)' : ''}',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
-                            validator: (value) =>
-                                value == null ? 'Select a category.' : null,
-                            onChanged: (value) =>
-                                setState(() => _categoryId = value),
-                          ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  key: const Key('incomeVehicleField'),
+                  initialValue: selectedVehicle?.id,
+                  decoration: const InputDecoration(labelText: 'Vehicle'),
+                  items: [
+                    for (final vehicle in vehicles)
+                      DropdownMenuItem(
+                        value: vehicle.id,
+                        child: Text(
+                          vehicle.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: DTSpacing.sm),
-                      IconButton.filledTonal(
-                        tooltip: 'Add category',
-                        onPressed: () => _addCategory(categories),
-                        icon: const Icon(Icons.add_rounded),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: DTSpacing.md),
-              TextFormField(
-                key: const Key('incomeAmountField'),
-                controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
+                  ],
+                  validator: (value) =>
+                      value == null ? 'Select a vehicle.' : null,
+                  onChanged: _isEditing
+                      ? null
+                      : (value) async {
+                          setState(() => _vehicleId = value);
+                          if (value == null) {
+                            return;
+                          }
+                          final odometer = await context
+                              .read<DriveTrackerController>()
+                              .currentOdometerForVehicle(value);
+                          if (mounted) {
+                            setState(() => _lastOdometer = odometer);
+                          }
+                        },
                 ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
-                ],
-                textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
-                  labelText: 'Amount',
-                  prefixText: currencySymbol,
-                ),
-                validator: (value) => _validatePositiveMoney(value, 'Amount'),
-              ),
-              const SizedBox(height: DTSpacing.md),
-              _DateTimeTile(
-                label: 'Date/time',
-                value: _eventDateTime,
-                onChanged: (value) => setState(() => _eventDateTime = value),
-              ),
-              const SizedBox(height: DTSpacing.xl),
-              DTFormSection(
-                title: 'Optional details',
-                icon: Icons.tune_rounded,
-                subtitle: 'Add source and mileage context for this income.',
-                children: [
-                  DTOdometerInput(
-                    controller: _odometerController,
-                    unitLabel: selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
-                    label: 'Odometer',
-                    validator: _validateOptionalOdometer,
-                    helperText: _isEditing
-                        ? null
-                        : dtOdometerContextText(
-                            referenceOdometer: _lastOdometer,
-                            unit: selectedVehicle?.distanceUnit,
-                            enteredOdometer: dtParseOdometerInput(
-                              _odometerController.text,
+                const SizedBox(height: DTSpacing.md),
+                FutureBuilder<List<RecordCategory>>(
+                  future: _categoriesFuture,
+                  builder: (context, snapshot) {
+                    final categories =
+                        snapshot.data ?? const <RecordCategory>[];
+                    if (snapshot.connectionState != ConnectionState.done &&
+                        categories.isEmpty) {
+                      return const LinearProgressIndicator();
+                    }
+                    if (_categoryId == null && categories.isNotEmpty) {
+                      _categoryId = categories.first.id;
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            key: const Key('incomeCategoryField'),
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              key: ValueKey<String>(
+                                'income-category-${_categoryId ?? 'none'}-${categories.length}',
+                              ),
+                              initialValue:
+                                  categories.any(
+                                    (category) => category.id == _categoryId,
+                                  )
+                                  ? _categoryId
+                                  : null,
+                              decoration: const InputDecoration(
+                                labelText: 'Category',
+                              ),
+                              items: [
+                                for (final category in categories)
+                                  DropdownMenuItem(
+                                    value: category.id,
+                                    child: Text(
+                                      '${category.name}${category.isArchived ? ' (archived)' : ''}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                              validator: (value) =>
+                                  value == null ? 'Select a category.' : null,
+                              onChanged: (value) =>
+                                  setState(() => _categoryId = value),
                             ),
                           ),
-                    textInputAction: TextInputAction.next,
-                    onChanged: _isEditing ? null : (_) => setState(() {}),
+                        ),
+                        const SizedBox(width: DTSpacing.sm),
+                        IconButton.filledTonal(
+                          tooltip: 'Add category',
+                          onPressed: () => _addCategory(categories),
+                          icon: const Icon(Icons.add_rounded),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: DTSpacing.md),
+                TextFormField(
+                  key: const Key('incomeAmountField'),
+                  onChanged: (_) => setState(() {}),
+                  controller: _amountController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
                   ),
-                  const SizedBox(height: DTSpacing.md),
-                  TextFormField(
-                    controller: _sourceController,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'Source'),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,£]')),
+                  ],
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(
+                    labelText: 'Gross received',
+                    prefixText: currencySymbol,
                   ),
-                  const SizedBox(height: DTSpacing.md),
-                  TextFormField(
-                    controller: _notesController,
-                    minLines: 3,
-                    maxLines: 5,
-                    decoration: const InputDecoration(labelText: 'Notes'),
+                  validator: (value) => _validatePositiveMoney(value, 'Amount'),
+                ),
+                const SizedBox(height: DTSpacing.md),
+                IncomeActivityFields(
+                  key: _activityKey,
+                  vehicleId: _vehicleId,
+                  unit: selectedVehicle?.distanceUnit ?? DistanceUnit.miles,
+                  categoryId: _categoryId,
+                  grossMinor: MoneyAmount.parseMinor(_amountController.text),
+                  original: widget.income,
+                ),
+                _DateTimeTile(
+                  label: 'Date/time',
+                  value: _eventDateTime,
+                  onChanged: (value) => setState(() => _eventDateTime = value),
+                ),
+                const SizedBox(height: DTSpacing.xl),
+                DTFormSection(
+                  title: 'Optional details',
+                  icon: Icons.tune_rounded,
+                  subtitle: 'Add source and mileage context for this income.',
+                  children: [
+                    DTOdometerInput(
+                      controller: _odometerController,
+                      unitLabel:
+                          selectedVehicle?.distanceUnit.shortLabel ?? 'mi',
+                      label: 'Odometer',
+                      validator: _validateOptionalOdometer,
+                      helperText: _isEditing
+                          ? null
+                          : dtOdometerContextText(
+                              referenceOdometer: _lastOdometer,
+                              unit: selectedVehicle?.distanceUnit,
+                              enteredOdometer: dtParseOdometerInput(
+                                _odometerController.text,
+                              ),
+                            ),
+                      textInputAction: TextInputAction.next,
+                      onChanged: _isEditing ? null : (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: DTSpacing.md),
+                    TextFormField(
+                      controller: _sourceController,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(labelText: 'Source'),
+                    ),
+                    const SizedBox(height: DTSpacing.md),
+                    TextFormField(
+                      controller: _notesController,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: const InputDecoration(labelText: 'Notes'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: DTSpacing.lg),
+                if (_isEditing)
+                  AttachmentPanel(
+                    key: Key('incomeAttachments_${widget.income!.id}'),
+                    parentType: AttachmentParentType.income,
+                    parentId: widget.income!.id,
+                  )
+                else
+                  const _AttachmentsAfterSaveHint(
+                    text: 'Save this income record, then add supporting files.',
+                  ),
+                if (_formError != null) ...[
+                  const SizedBox(height: DTSpacing.lg),
+                  Text(
+                    _formError!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
                   ),
                 ],
-              ),
-              const SizedBox(height: DTSpacing.lg),
-              if (_isEditing)
-                AttachmentPanel(
-                  key: Key('incomeAttachments_${widget.income!.id}'),
-                  parentType: AttachmentParentType.income,
-                  parentId: widget.income!.id,
-                )
-              else
-                const _AttachmentsAfterSaveHint(
-                  text: 'Save this income record, then add supporting files.',
-                ),
-              if (_formError != null) ...[
-                const SizedBox(height: DTSpacing.lg),
-                Text(
-                  _formError!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
+                const SizedBox(height: DTSpacing.xxxl),
               ],
-              const SizedBox(height: DTSpacing.xxxl),
-            ],
+            ),
           ),
         ),
       ),
@@ -324,23 +345,39 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
     bool allowHistorical = false,
     bool confirmLargeIncrease = false,
   }) async {
+    if (_saving) return;
     FocusScope.of(context).unfocus();
     setState(() => _formError = null);
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
-    final draft = IncomeDraft(
-      vehicleId: _vehicleId!,
-      categoryId: _categoryId!,
-      eventDateTime: _eventDateTime,
-      amountMinor: MoneyAmount.parseMinor(_amountController.text)!,
-      odometer: _parseInt(_odometerController.text),
-      source: _sourceController.text,
-      notes: _notesController.text,
-    );
-
+    setState(() => _saving = true);
     try {
+      final activity = await _activityKey.currentState!.prepare();
+      if (!mounted) return;
+      final draft = IncomeDraft(
+        vehicleId: _vehicleId!,
+        categoryId: _categoryId!,
+        eventDateTime: _eventDateTime,
+        amountMinor: MoneyAmount.parseMinor(_amountController.text)!,
+        odometer: _parseInt(_odometerController.text),
+        activity: activity,
+        linkedExpenseIds: _activityKey.currentState!.expenseIds,
+        newDirectExpenses: [
+          for (final e in _activityKey.currentState!.newExpenses)
+            ExpenseDraft(
+              vehicleId: _vehicleId!,
+              categoryId: e.categoryId,
+              eventDateTime: _eventDateTime,
+              amountMinor: e.amountMinor,
+              merchant: e.merchant,
+            ),
+        ],
+        source: _sourceController.text,
+        notes: _notesController.text,
+      );
+
       final controller = context.read<DriveTrackerController>();
       if (_isEditing) {
         await controller.updateIncome(
@@ -367,6 +404,7 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
       if (!confirmed) {
         return;
       }
+      _saving = false;
       await _save(
         allowHistorical:
             error.assessment.decision == OdometerDecision.belowCurrent,
@@ -384,6 +422,8 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
         return;
       }
       setState(() => _formError = 'Could not save income.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -392,7 +432,9 @@ class _IncomeFormScreenState extends State<IncomeFormScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete income?'),
-        content: const Text('This removes only its linked odometer entry.'),
+        content: const Text(
+          'This removes the income, attachments and linked odometer entry. Direct expenses are retained and unlinked.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

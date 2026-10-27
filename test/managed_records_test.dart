@@ -140,7 +140,7 @@ void main() {
         );
         await s.categoryService.delete(second.id);
         expect(await s.categories.getById(second.id), isNull);
-        expect(DatabaseMigrations.schemaVersion, 5);
+        expect(DatabaseMigrations.schemaVersion, 6);
       },
     );
   }
@@ -247,7 +247,7 @@ void main() {
       )).map((c) => c.id),
       order,
     );
-    expect(DatabaseMigrations.schemaVersion, 5);
+    expect(DatabaseMigrations.schemaVersion, 6);
     expect(DataSafetyService.backupFormatVersion, 1);
   });
 

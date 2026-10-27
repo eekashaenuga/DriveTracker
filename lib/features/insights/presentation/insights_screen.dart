@@ -1,3 +1,5 @@
+import 'income_activity_earnings_panel.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -257,6 +259,10 @@ class _InsightsBody extends StatelessWidget {
           const _InsightSectionHeader(title: 'Mileage'),
           _MileagePanel(insights: insights),
           if (insights.hasIncome) ...[
+            IncomeActivityEarningsPanel(
+              records: insights.incomeActivities,
+              unit: insights.scope.distanceUnit,
+            ),
             const _InsightSectionHeader(title: 'Income and net'),
             _IncomePanel(insights: insights),
           ],

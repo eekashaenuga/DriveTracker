@@ -84,6 +84,17 @@ class ExpenseService {
     if (existing == null) {
       throw const ValidationException(['Expense not found.']);
     }
+    final db = await database.database;
+    if (existing.vehicleId != draft.vehicleId &&
+        (await db.query(
+          'income_activity_expenses',
+          where: 'expense_id=?',
+          whereArgs: [expenseId],
+        )).isNotEmpty) {
+      throw const ValidationException([
+        'Unlink the expense before changing its vehicle.',
+      ]);
+    }
     await _validateDraft(
       draft,
       originalCategoryId: existing.categoryId,
@@ -117,6 +128,16 @@ class ExpenseService {
     final existing = await expenseRepository.getById(expenseId);
     if (existing == null) {
       return;
+    }
+    final db = await database.database;
+    if ((await db.query(
+      'income_activity_expenses',
+      where: 'expense_id=?',
+      whereArgs: [expenseId],
+    )).isNotEmpty) {
+      throw const ValidationException([
+        'Unlink this expense from its income activity before deleting it.',
+      ]);
     }
     await database.transaction((txn) async {
       await odometerRepository.deleteBySource(

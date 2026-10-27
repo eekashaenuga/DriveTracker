@@ -21,7 +21,7 @@ void main() {
           }
         });
 
-        for (final version in [1, 2, 3, 4, 5]) {
+        for (final version in [1, 2, 3, 4, 5, 6]) {
           final path = p.join(dir.path, 'schema_v$version.db');
           final db = await databaseFactoryFfi.openDatabase(
             path,
@@ -51,7 +51,7 @@ void main() {
           'dt_upgrade_validation_',
         );
         addTearDown(() => dir.delete(recursive: true));
-        for (final version in [1, 2, 3, 4, 5]) {
+        for (final version in [1, 2, 3, 4, 5, 6]) {
           final path = p.join(dir.path, 'upgrade_v$version.db');
           final old = await databaseFactoryFfi.openDatabase(
             path,

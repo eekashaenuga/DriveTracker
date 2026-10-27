@@ -1,3 +1,6 @@
+import '../../daily_records/domain/income.dart';
+import '../../daily_records/domain/income_earnings.dart';
+
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../../../core/calculations/analytics_date_range.dart';
@@ -108,6 +111,10 @@ class InsightsRepository {
             (v) => v.acquisitionCostMinor != null && v.purchaseDate == null,
           )
           .length,
+      incomeActivities: [
+        for (final record in income)
+          IncomeEarnings(record.income, record.directCostsMinor),
+      ],
       scope: scope,
       range: resolvedRange,
       fuelSpendMinor: fuelSpend,
@@ -223,7 +230,8 @@ class InsightsRepository {
     }
     final query = _recordQuery('i', vehicleIds, range);
     final rows = await db.rawQuery('''
-      SELECT i.*, c.name AS category_name
+      SELECT i.*, c.name AS category_name,
+        COALESCE((SELECT SUM(e.amount_minor) FROM income_activity_expenses l JOIN expenses e ON e.id=l.expense_id WHERE l.income_id=i.id),0) AS activity_direct_cost_minor
       FROM income_records i
       JOIN record_categories c ON c.id = i.category_id
       ${query.whereClause}
@@ -731,13 +739,22 @@ class _ExpenseRecord {
 }
 
 class _IncomeRecord {
-  const _IncomeRecord({required this.eventDateTime, required this.amountMinor});
+  const _IncomeRecord({
+    required this.eventDateTime,
+    required this.amountMinor,
+    required this.income,
+    required this.directCostsMinor,
+  });
+  final Income income;
+  final int directCostsMinor;
 
   final DateTime eventDateTime;
   final int amountMinor;
 
   factory _IncomeRecord.fromMap(Map<String, Object?> map) {
     return _IncomeRecord(
+      income: Income.fromMap(map),
+      directCostsMinor: map['activity_direct_cost_minor'] as int,
       eventDateTime: DateTime.parse(map['event_datetime'] as String),
       amountMinor: map['amount_minor'] as int,
     );

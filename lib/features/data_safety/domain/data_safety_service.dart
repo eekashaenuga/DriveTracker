@@ -952,6 +952,8 @@ class DataSafetyService {
   String? _orderByFor(String table) {
     return switch (table) {
       'app_settings' => 'key ASC',
+      'income_activity_expenses' =>
+        'income_id ASC, created_at ASC, expense_id ASC',
       'service_items' => 'service_id ASC, created_at ASC, id ASC',
       _ => 'created_at ASC, id ASC',
     };

@@ -1,3 +1,4 @@
+import '../../daily_records/domain/income_earnings.dart';
 import '../../../core/calculations/analytics_date_range.dart';
 import '../../../core/calculations/cost_per_distance.dart';
 import '../../daily_records/domain/daily_activity.dart';
@@ -5,6 +6,7 @@ import '../../vehicles/domain/vehicle.dart';
 
 class VehicleInsights {
   const VehicleInsights({
+    this.incomeActivities = const [],
     this.acquisitionCostMinor = 0,
     this.acquisitionCount = 0,
     this.undatedAcquisitionCount = 0,
@@ -25,6 +27,7 @@ class VehicleInsights {
     required this.odometerTrend,
   });
 
+  final List<IncomeEarnings> incomeActivities;
   final int acquisitionCostMinor;
   final int acquisitionCount;
   final int undatedAcquisitionCount;
