@@ -1,10 +1,11 @@
+import '../../reminders/presentation/notification_health_panel.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../app/router/app_navigation.dart';
 import '../../../app/theme/dt_tokens.dart';
-import '../../../core/notifications/local_notification_service.dart';
 import '../../../shared/widgets/dt_list_card.dart';
 import '../../../shared/widgets/dt_section_header.dart';
 
@@ -105,6 +106,7 @@ class SettingsScreen extends StatelessWidget {
               ),
               enabled: controller.localNotificationsSupported,
             ),
+            const NotificationHealthPanel(showStatus: false),
           ],
         ),
       ),
@@ -112,16 +114,5 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-String _notificationSubtitle(DriveTrackerController controller) {
-  if (!controller.localNotificationsSupported) {
-    return 'Available on Android devices.';
-  }
-  if (controller.localReminderNotificationsEnabled) {
-    return 'Date reminders are scheduled locally at 9:00 AM.';
-  }
-  if (controller.localNotificationPermissionStatus ==
-      LocalNotificationPermissionStatus.denied) {
-    return 'Off. Android permission is needed for local alerts.';
-  }
-  return 'Off. In-app reminders continue to work.';
-}
+String _notificationSubtitle(DriveTrackerController controller) =>
+    controller.notificationHealthLabel;

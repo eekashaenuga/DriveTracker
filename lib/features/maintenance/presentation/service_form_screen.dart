@@ -23,11 +23,15 @@ import '../domain/service_record.dart';
 class ServiceFormScreen extends StatefulWidget {
   const ServiceFormScreen({
     this.service,
+    this.initialVehicleId,
+    this.initialOdometer,
     this.preselectedMaintenanceItemId,
     super.key,
   });
 
   final ServiceRecordWithItems? service;
+  final String? initialVehicleId;
+  final int? initialOdometer;
   final String? preselectedMaintenanceItemId;
 
   @override
@@ -61,7 +65,7 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
     super.initState();
     final service = widget.service;
     _eventDateTime = service?.record.eventDateTime.toLocal() ?? DateTime.now();
-    _vehicleId = service?.record.vehicleId;
+    _vehicleId = service?.record.vehicleId ?? widget.initialVehicleId;
     if (service != null) {
       final record = service.record;
       _odometerController.text = record.odometer == null
@@ -101,7 +105,9 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
     if (!_didDefaultFromController) {
       _didDefaultFromController = true;
       _vehicleId ??= context.read<DriveTrackerController>().selectedVehicle?.id;
-      final odometer = context.read<DriveTrackerController>().currentOdometer;
+      final odometer = widget.initialVehicleId != null
+          ? widget.initialOdometer
+          : context.read<DriveTrackerController>().currentOdometer;
       _lastOdometer = odometer;
       if (!_isEditing && odometer != null) {
         _odometerController.text = DTFormatters.wholeNumber(odometer);

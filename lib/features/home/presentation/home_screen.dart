@@ -1,3 +1,5 @@
+import '../../documents/domain/document_type.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -99,7 +101,7 @@ class _HomeDashboardContent extends StatelessWidget {
             icon: Icons.event_outlined,
             title: controller.nextDocumentAttention!.title,
             subtitle:
-                '${controller.nextDocumentAttention!.state.label} · Expires ${DTFormatters.date(controller.nextDocumentAttention!.document.expiryDate!)}',
+                '${controller.nextDocumentAttention!.state.label} · ${controller.nextDocumentAttention!.document.type == DocumentType.tax ? 'Due' : 'Expires'} ${DTFormatters.date(controller.nextDocumentAttention!.document.expiryDate!)}',
             accentColor: _maintenanceColor(
               context,
               controller.nextDocumentAttention!.state,

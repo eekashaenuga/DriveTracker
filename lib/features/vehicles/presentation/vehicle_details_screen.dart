@@ -11,6 +11,7 @@ import '../../../shared/widgets/dt_metric_card.dart';
 import '../../../shared/widgets/dt_section_header.dart';
 import '../../odometer/domain/odometer_entry.dart';
 import '../domain/vehicle.dart';
+import '../../documents/presentation/vehicle_documents_overview.dart';
 
 class VehicleDetailsScreen extends StatelessWidget {
   const VehicleDetailsScreen({required this.vehicleId, super.key});
@@ -79,6 +80,7 @@ class VehicleDetailsScreen extends StatelessWidget {
                 ),
                 const DTSectionHeader(title: 'Profile'),
                 _ProfileRows(vehicle: vehicle),
+                VehicleDocumentsOverview(vehicleId: vehicle.id),
                 const DTSectionHeader(title: 'Odometer history'),
                 if (entries.isEmpty)
                   const Text('No odometer entries recorded yet.')

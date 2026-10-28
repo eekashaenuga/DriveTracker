@@ -273,6 +273,19 @@ void main() {
         (w) => w is DropdownButtonFormField<IncomeActivityType>,
       );
       await tap(t, selector);
+      // SQLite work needs real event-loop time before animated loading states
+      // can settle under the widget test's fake clock.
+      for (
+        var i = 0;
+        i < 200 && find.byType(LinearProgressIndicator).evaluate().isNotEmpty;
+        i++
+      ) {
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await t.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.byType(LinearProgressIndicator), findsNothing);
       await t.pumpAndSettle();
       await tap(t, find.text('Delivery shift').last);
       await t.pumpAndSettle();

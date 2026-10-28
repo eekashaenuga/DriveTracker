@@ -9,6 +9,8 @@ import '../../reminders/domain/date_reminder_schedule.dart';
 import 'maintenance_reminder.dart';
 import 'maintenance_reminder_engine.dart';
 import 'service_record.dart';
+import '../../documents/domain/document_type.dart';
+import '../../documents/domain/mot_reminder_guard.dart';
 
 typedef Clock = DateTime Function();
 
@@ -35,6 +37,7 @@ class MaintenanceItemService {
     MaintenanceItemDraft draft,
   ) async {
     await _validateDraft(draft);
+    await _checkMot(draft);
     final cleanName = draft.name.trim();
     final duplicate = await maintenanceItemRepository.findActiveByName(
       draft.vehicleId,
@@ -86,6 +89,18 @@ class MaintenanceItemService {
       ]);
     }
     await _validateDraft(draft);
+    if (!existing.isArchived &&
+        (!existing.reminderEnabled ||
+            DocumentType.classify(existing.category ?? existing.name) !=
+                DocumentType.mot ||
+            (existing.isExpiry &&
+                !hasDateNotifications(existing.reminderSchedule)))) {
+      await _checkMot(
+        draft,
+        excludingId: existing.id,
+        fallbackSchedule: existing.reminderSchedule,
+      );
+    }
     final cleanName = draft.name.trim();
     final duplicate = await maintenanceItemRepository.findActiveByName(
       draft.vehicleId,
@@ -226,6 +241,23 @@ class MaintenanceItemService {
     }
     if (draft.dateWarningDays < 0) {
       throw const ValidationException(['Date warning cannot be negative.']);
+    }
+  }
+
+  Future<void> _checkMot(
+    MaintenanceItemDraft draft, {
+    String? excludingId,
+    DateReminderSchedule? fallbackSchedule,
+  }) async {
+    if (draft.reminderEnabled &&
+        DocumentType.classify(draft.category ?? draft.name) ==
+            DocumentType.mot &&
+        (!draft.isExpiry ||
+            hasDateNotifications(draft.reminderSchedule ?? fallbackSchedule))) {
+      await maintenanceItemRepository.checkMotReminder(
+        draft.vehicleId,
+        excludingId: excludingId,
+      );
     }
   }
 }

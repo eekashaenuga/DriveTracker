@@ -30,6 +30,8 @@ class DateReminderSchedule {
   /// Inclusive countdown, ending on the due/expiry day. Null disables it.
   final int? dailyFromDays;
 
+  bool get isEnabled => offsets.isNotEmpty || dailyFromDays != null;
+
   bool get isValid =>
       offsets.length <= 24 &&
       offsets.every(

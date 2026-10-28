@@ -281,7 +281,7 @@ void main() {
       expect(result.scheduled, isEmpty);
       expect(client.cancelled, [staleId]);
       expect(inAppReminders.single.shouldShowAsReminder, isTrue);
-      expect(inAppReminders.single.nextDateDue, DateTime.utc(2026, 10, 1));
+      expect(inAppReminders.single.nextDateDue, DateTime(2026, 10, 1));
     });
 
     test('startup reconciliation removes stale IDs and leaves one desired schedule', () async {

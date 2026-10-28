@@ -3,6 +3,7 @@ import 'reminder_wording.dart';
 import '../../../core/notifications/local_notification_service.dart';
 import '../../documents/data/document_repository.dart';
 import '../../documents/domain/vehicle_document.dart';
+import '../../documents/domain/document_type.dart';
 import '../../maintenance/domain/maintenance_item_service.dart';
 import '../../maintenance/domain/maintenance_reminder.dart';
 import '../../odometer/data/odometer_repository.dart';
@@ -48,6 +49,8 @@ class ReminderNotificationScheduler {
   final DocumentRepository _documentRepository;
   final DateTime Function() _clock;
 
+  final List<String> _buildFailures = [];
+
   bool get isSupported => _client.isSupported;
 
   Future<LocalNotificationPermissionStatus> permissionStatus() {
@@ -67,99 +70,151 @@ class ReminderNotificationScheduler {
     final ownedPendingIds = pendingIds
         .where(isDriveTrackerNotificationId)
         .toSet();
+    final failures = <String>[];
+    final cancelled = <int>{};
+    final scheduled = <LocalNotificationRequest>[];
+    Future<bool> cancel(int id) async {
+      try {
+        await _client.cancel(id);
+        cancelled.add(id);
+        return true;
+      } catch (_) {
+        failures.add('cancel:$id');
+        return false;
+      }
+    }
 
     final permission = await _client.permissionStatus();
     if (!enabled || permission != LocalNotificationPermissionStatus.granted) {
-      for (final id in ownedPendingIds) {
-        await _client.cancel(id);
+      final ids = {...ownedPendingIds};
+      if (_client is NotificationInteractionClient) {
+        try {
+          ids.addAll(
+            (await (_client as NotificationInteractionClient)
+                    .activeNotificationIds())
+                .where(isDriveTrackerNotificationId),
+          );
+        } catch (_) {
+          failures.add('active-notifications');
+        }
+      }
+      for (final id in ids) {
+        await cancel(id);
       }
       return ReminderNotificationReconciliation(
-        scheduled: const [],
-        cancelledIds: ownedPendingIds,
+        scheduled: scheduled,
+        cancelledIds: cancelled,
+        failures: failures,
       );
     }
-
     final desired = await buildDateReminderRequests();
-    final desiredIds = {for (final request in desired) request.id};
-    final staleIds = ownedPendingIds.difference(desiredIds);
-
-    for (final id in staleIds) {
-      await _client.cancel(id);
+    failures.addAll(_buildFailures);
+    final desiredIds = desired.map((r) => r.id).toSet();
+    // If a source cannot be read, keep unknown old schedules until a successful
+    // retry; still reconcile the other valid sources.
+    if (_buildFailures.isEmpty) {
+      for (final id in ownedPendingIds.difference(desiredIds)) {
+        await cancel(id);
+      }
     }
     for (final request in desired) {
-      await _client.cancel(request.id);
-      await _client.schedule(request);
+      if (!await cancel(request.id)) continue;
+      try {
+        await _client.schedule(request);
+        scheduled.add(request);
+      } catch (_) {
+        failures.add('schedule:${request.stableId}');
+      }
     }
-
     return ReminderNotificationReconciliation(
-      scheduled: desired,
-      cancelledIds: {...staleIds, ...desiredIds.intersection(ownedPendingIds)},
+      scheduled: scheduled,
+      cancelledIds: cancelled,
+      failures: failures,
     );
   }
 
   Future<List<LocalNotificationRequest>> buildDateReminderRequests() async {
+    _buildFailures.clear();
     final now = _clock();
     final vehicles = await _vehicleRepository.listActive();
     final requests = <LocalNotificationRequest>[];
 
     for (final vehicle in vehicles) {
-      final currentOdometer = await _odometerRepository
-          .currentOdometerForVehicle(vehicle.id);
-      final maintenanceReminders = await _maintenanceItemService
-          .remindersForVehicle(
-            vehicle.id,
-            currentOdometer: currentOdometer,
-            asOf: now,
-          );
+      List<MaintenanceReminder> maintenanceReminders = [];
+      try {
+        final currentOdometer = await _odometerRepository
+            .currentOdometerForVehicle(vehicle.id);
+        maintenanceReminders = await _maintenanceItemService
+            .remindersForVehicle(
+              vehicle.id,
+              currentOdometer: currentOdometer,
+              asOf: now,
+            );
+      } catch (_) {
+        _buildFailures.add('maintenance:${vehicle.id}');
+      }
       for (final reminder in maintenanceReminders) {
         if (!reminder.shouldShowAsReminder || reminder.nextDateDue == null) {
           continue;
         }
-        final schedule = reminder.item.reminderSchedule;
-        if (schedule == null && !reminder.item.isExpiry) {
-          requests.add(_maintenanceRequest(vehicle, reminder, now));
-        } else {
-          requests.addAll(
-            _multipleRequests(
-              namespace: 'maintenance_date',
-              recordId: reminder.item.id,
-              vehicle: vehicle,
-              name: reminder.item.name,
-              due: reminder.nextDateDue!,
-              schedule: schedule ?? DateReminderSchedule.standard,
-              now: now,
-              expiry: reminder.item.isExpiry,
-              mot: reminder.item.isMot,
-            ),
-          );
+        try {
+          final schedule = reminder.item.reminderSchedule;
+          if (schedule == null && !reminder.item.isExpiry) {
+            requests.add(_maintenanceRequest(vehicle, reminder, now));
+          } else {
+            requests.addAll(
+              _multipleRequests(
+                namespace: 'maintenance_date',
+                recordId: reminder.item.id,
+                vehicle: vehicle,
+                name: reminder.item.name,
+                due: reminder.nextDateDue!,
+                schedule: schedule ?? DateReminderSchedule.standard,
+                now: now,
+                expiry: reminder.item.isExpiry,
+                mot: reminder.item.isMot,
+              ),
+            );
+          }
+        } catch (_) {
+          _buildFailures.add('maintenance:${reminder.item.id}');
         }
       }
 
-      final documents = await _documentRepository.activeExpiringForVehicle(
-        vehicle.id,
-      );
+      List<VehicleDocument> documents = [];
+      try {
+        documents = await _documentRepository.activeExpiringForVehicle(
+          vehicle.id,
+        );
+      } catch (_) {
+        _buildFailures.add('documents:${vehicle.id}');
+      }
       for (final document in documents) {
         final expiry = document.expiryDate;
         if (expiry == null) {
           continue;
         }
-        final schedule = document.reminderSchedule;
-        if (schedule == null) {
-          requests.add(_documentRequest(vehicle, document, expiry, now));
-        } else {
-          requests.addAll(
-            _multipleRequests(
-              namespace: 'document_date',
-              recordId: document.id,
-              vehicle: vehicle,
-              name: document.category,
-              due: expiry,
-              schedule: schedule,
-              now: now,
-              expiry: true,
-              mot: document.category.trim().toUpperCase() == 'MOT',
-            ),
-          );
+        try {
+          final schedule = document.reminderSchedule;
+          if (schedule == null) {
+            requests.add(_documentRequest(vehicle, document, expiry, now));
+          } else {
+            requests.addAll(
+              _multipleRequests(
+                namespace: 'document_date',
+                recordId: document.id,
+                vehicle: vehicle,
+                name: document.category,
+                due: expiry,
+                schedule: schedule,
+                now: now,
+                expiry: document.type != DocumentType.tax,
+                mot: document.type == DocumentType.mot,
+              ),
+            );
+          }
+        } catch (_) {
+          _buildFailures.add('document:${document.id}');
         }
       }
     }
@@ -290,8 +345,8 @@ class ReminderNotificationScheduler {
       name: document.category,
       due: dueDate,
       asOf: scheduledAt,
-      expiry: true,
-      mot: document.category.toUpperCase() == 'MOT',
+      expiry: document.type != DocumentType.tax,
+      mot: document.type == DocumentType.mot,
     );
     return LocalNotificationRequest(
       id: notificationIdForStableId(stableId),
@@ -367,8 +422,11 @@ class ReminderNotificationReconciliation {
   const ReminderNotificationReconciliation({
     required this.scheduled,
     required this.cancelledIds,
+    this.failures = const [],
   });
 
   final List<LocalNotificationRequest> scheduled;
   final Set<int> cancelledIds;
+  final List<String> failures;
+  bool get isPartial => failures.isNotEmpty;
 }

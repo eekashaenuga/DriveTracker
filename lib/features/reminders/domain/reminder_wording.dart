@@ -1,4 +1,5 @@
 import 'date_reminder_schedule.dart';
+import '../../documents/domain/document_type.dart';
 
 /// Shared by notifications and the details page. Days are evaluated at delivery,
 /// not when the notification is created.
@@ -19,6 +20,13 @@ class ReminderWording {
         ? (expiry ? 'expires today' : 'due today')
         : '${expiry ? 'expires' : 'due'} in $days ${days == 1 ? 'day' : 'days'}';
     final title = '$name $when';
+    if (DocumentType.classify(name) == DocumentType.tax) {
+      return (
+        title: title,
+        body:
+            '$vehicle: user-recorded vehicle tax due date ${formatDate(due)}. Review and update this record.',
+      );
+    }
     if (mot && days < 0) {
       // GOV.UK: https://www.gov.uk/getting-an-mot
       return (

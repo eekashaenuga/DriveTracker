@@ -10,9 +10,13 @@ import '../../../shared/widgets/dt_section_header.dart';
 import '../../attachments/domain/attachment.dart';
 import '../../vehicles/domain/vehicle.dart';
 import '../domain/vehicle_document.dart';
+import '../domain/document_type.dart';
+import '../domain/vehicle_document_overview.dart';
+import 'vehicle_documents_overview.dart';
 
 class DocumentsScreen extends StatefulWidget {
-  const DocumentsScreen({super.key});
+  const DocumentsScreen({this.vehicleId, super.key});
+  final String? vehicleId;
 
   @override
   State<DocumentsScreen> createState() => _DocumentsScreenState();
@@ -21,14 +25,20 @@ class DocumentsScreen extends StatefulWidget {
 class _DocumentsScreenState extends State<DocumentsScreen> {
   Future<List<VehicleDocument>>? _documentsFuture;
   String? _loadedVehicleId;
+  int? _loadedRevision;
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<DriveTrackerController>();
     final vehicles = controller.activeVehicles;
-    final vehicle = controller.selectedVehicle;
+    final vehicle = widget.vehicleId == null
+        ? controller.selectedVehicle
+        : [
+            ...controller.activeVehicles,
+            ...controller.archivedVehicles,
+          ].where((v) => v.id == widget.vehicleId).firstOrNull;
 
-    if (vehicle == null || vehicles.isEmpty) {
+    if (vehicle == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Documents')),
         body: const SafeArea(
@@ -41,9 +51,13 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       );
     }
 
-    if (_documentsFuture == null || _loadedVehicleId != vehicle.id) {
+    if (_documentsFuture == null ||
+        _loadedVehicleId != vehicle.id ||
+        _loadedRevision != controller.dataRevision) {
+      _loadedRevision = controller.dataRevision;
       _loadedVehicleId = vehicle.id;
-      _documentsFuture = controller.documentsForSelectedVehicle(
+      _documentsFuture = controller.documentsForVehicle(
+        vehicle.id,
         includeArchived: true,
       );
     }
@@ -56,7 +70,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             key: const Key('addDocumentButton'),
             tooltip: 'Add document',
             onPressed: () async {
-              await AppNavigation.openAddDocument(context);
+              await AppNavigation.openAddDocument(
+                context,
+                vehicleId: vehicle.id,
+              );
               if (mounted) {
                 await _refresh();
               }
@@ -69,6 +86,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: FutureBuilder<List<VehicleDocument>>(
+            key: ValueKey(vehicle.id),
             future: _documentsFuture,
             builder: (context, snapshot) {
               final documents = snapshot.data;
@@ -84,15 +102,20 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   DTSpacing.xxxl,
                 ),
                 children: [
-                  _VehicleSelector(
-                    vehicles: vehicles,
-                    selectedVehicle: vehicle,
-                    onChanged: (vehicleId) async {
-                      await controller.selectVehicle(vehicleId);
-                      if (mounted) {
-                        await _refresh();
-                      }
-                    },
+                  if (widget.vehicleId == null)
+                    _VehicleSelector(
+                      vehicles: vehicles,
+                      selectedVehicle: vehicle,
+                      onChanged: (vehicleId) async {
+                        await controller.selectVehicle(vehicleId);
+                        if (mounted) {
+                          await _refresh();
+                        }
+                      },
+                    ),
+                  VehicleDocumentsOverview(
+                    vehicleId: vehicle.id,
+                    showAll: false,
                   ),
                   if (documents.isEmpty)
                     Padding(
@@ -104,7 +127,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                         action: FilledButton.icon(
                           key: const Key('emptyAddDocumentButton'),
                           onPressed: () async {
-                            await AppNavigation.openAddDocument(context);
+                            await AppNavigation.openAddDocument(
+                              context,
+                              vehicleId: vehicle.id,
+                            );
                             if (mounted) {
                               await _refresh();
                             }
@@ -130,9 +156,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   }
 
   Future<void> _refresh() async {
-    final future = context
-        .read<DriveTrackerController>()
-        .documentsForSelectedVehicle(includeArchived: true);
+    final future = context.read<DriveTrackerController>().documentsForVehicle(
+      _loadedVehicleId!,
+      includeArchived: true,
+    );
     setState(() {
       _documentsFuture = future;
     });
@@ -190,8 +217,9 @@ class _DocumentSections extends StatelessWidget {
     final attention = active
         .where(
           (document) =>
+              (document.type.requiresDate && document.expiryDate == null) ||
               document.statusAt(asOf).severity >=
-              DocumentStatus.expiringSoon.severity,
+                  DocumentStatus.expiringSoon.severity,
         )
         .toList();
     final current = active
@@ -334,7 +362,7 @@ class _DocumentCard extends StatelessWidget {
       document.provider,
       document.referenceNumber,
       if (document.expiryDate != null)
-        'Recorded expiry: ${compactDate(document.expiryDate!)}'
+        'Recorded ${document.type == DocumentType.tax ? 'due date' : 'expiry'}: ${compactDate(document.expiryDate!)}'
       else
         'No expiry recorded',
     ];
@@ -403,11 +431,13 @@ class _StatusChip extends StatelessWidget {
             color: chipColors.foreground,
           ),
           const SizedBox(width: DTSpacing.xs),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: chipColors.foreground,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: chipColors.foreground,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -439,7 +469,9 @@ class _InfoChip extends StatelessWidget {
         children: [
           Icon(icon, size: DTIconSizes.sm, color: colors.onSurfaceVariant),
           const SizedBox(width: DTSpacing.xs),
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          Flexible(
+            child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+          ),
         ],
       ),
     );
@@ -474,20 +506,14 @@ _StatusPalette _statusColors(ColorScheme colors, DocumentStatus status) {
   };
 }
 
-IconData _iconFor(String category) {
-  final normalized = category.toLowerCase();
-  if (normalized.contains('insurance')) return Icons.shield_outlined;
-  if (normalized.contains('mot')) return Icons.verified_outlined;
-  if (normalized.contains('v5c')) return Icons.directions_car_outlined;
-  if (normalized.contains('receipt')) return Icons.receipt_long_outlined;
-  if (normalized.contains('warranty')) return Icons.workspace_premium_outlined;
-  if (normalized.contains('breakdown')) return Icons.support_agent_outlined;
-  if (normalized.contains('tax')) return Icons.account_balance_outlined;
-  if (normalized.contains('finance') || normalized.contains('lease')) {
-    return Icons.request_quote_outlined;
-  }
-  return Icons.description_outlined;
-}
+IconData _iconFor(String category) => switch (DocumentType.classify(category)) {
+  DocumentType.mot => Icons.verified_outlined,
+  DocumentType.insurance => Icons.shield_outlined,
+  DocumentType.tax => Icons.account_balance_outlined,
+  DocumentType.v5c => Icons.directions_car_outlined,
+  DocumentType.receipt => Icons.receipt_long_outlined,
+  DocumentType.other => Icons.description_outlined,
+};
 
 IconData _statusIcon(DocumentStatus status) {
   return switch (status) {
@@ -502,18 +528,4 @@ String _statusLabel(
   VehicleDocument document,
   DocumentStatus status,
   DateTime asOf,
-) {
-  final days = document.daysUntilExpiry(asOf);
-  return switch (status) {
-    DocumentStatus.noExpiry => 'No expiry',
-    DocumentStatus.valid when days != null => 'Expires in $days days',
-    DocumentStatus.valid => 'Recorded',
-    DocumentStatus.expiringSoon when days == 0 => 'Expires today',
-    DocumentStatus.expiringSoon when days == 1 => 'Expires tomorrow',
-    DocumentStatus.expiringSoon when days != null => 'Expires in $days days',
-    DocumentStatus.expiringSoon => 'Expiring soon',
-    DocumentStatus.expired when days == -1 => 'Expired yesterday',
-    DocumentStatus.expired when days != null => 'Expired ${-days} days ago',
-    DocumentStatus.expired => 'Expired',
-  };
-}
+) => documentStatusLabel(document.type, document.expiryDate, asOf);

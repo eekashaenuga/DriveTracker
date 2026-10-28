@@ -96,7 +96,7 @@ class HomeRepository {
             .map(
               (d) => DocumentExpiryReminder.evaluate(document: d, asOf: asOf),
             )
-            .where((r) => r.shouldShowAsReminder)
+            .where((r) => r.needsAttention)
             .toList()
           ..sort((a, b) {
             final severity = b.state.severity.compareTo(a.state.severity);

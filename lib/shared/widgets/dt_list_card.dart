@@ -14,6 +14,8 @@ class DTListCard extends StatelessWidget {
     this.selected = false,
     this.enabled = true,
     this.semanticLabel,
+    this.subtitleMaxLines = 2,
+    this.stackTrailingOnNarrow = false,
     super.key,
   });
 
@@ -26,12 +28,19 @@ class DTListCard extends StatelessWidget {
   final bool selected;
   final bool enabled;
   final String? semanticLabel;
+  final int? subtitleMaxLines;
+  final bool stackTrailingOnNarrow;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final effectiveOnTap = enabled ? onTap : null;
+    final stackTrailing =
+        stackTrailingOnNarrow &&
+        trailing != null &&
+        (MediaQuery.sizeOf(context).width < 400 ||
+            MediaQuery.textScalerOf(context).scale(14) > 20);
     return Semantics(
       button: effectiveOnTap != null,
       selected: selected,
@@ -70,16 +79,26 @@ class DTListCard extends StatelessWidget {
                       const SizedBox(height: DTSpacing.xs),
                       Text(
                         subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: subtitleMaxLines,
+                        overflow: subtitleMaxLines == null
+                            ? TextOverflow.clip
+                            : TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
                       ),
+                      if (stackTrailing)
+                        Padding(
+                          padding: const EdgeInsets.only(top: DTSpacing.sm),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: trailing,
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                if (trailing != null) ...[
+                if (trailing != null && !stackTrailing) ...[
                   const SizedBox(width: DTSpacing.md),
                   ConstrainedBox(
                     constraints: const BoxConstraints(

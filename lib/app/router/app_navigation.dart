@@ -1,3 +1,8 @@
+import 'package:provider/provider.dart';
+
+import '../app_controller.dart';
+import '../../features/reminders/presentation/reminders_screen.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../features/calculator/presentation/fuel_calculator_screen.dart';
@@ -115,7 +120,7 @@ class AppNavigation {
     BuildContext context, {
     ServiceRecordWithItems? service,
     String? preselectedMaintenanceItemId,
-  }) {
+  }) async {
     if (service != null) {
       return openRecordDetails(
         context,
@@ -123,25 +128,54 @@ class AppNavigation {
         service.record.id,
       );
     }
+    String? vehicleId;
+    int? odometer;
+    if (preselectedMaintenanceItemId != null) {
+      final controller = context.read<DriveTrackerController>();
+      final item = await controller.maintenanceItemById(
+        preselectedMaintenanceItemId,
+      );
+      vehicleId = item?.vehicleId;
+      if (vehicleId != null) {
+        odometer = await controller.currentOdometerForVehicle(vehicleId);
+      }
+      if (!context.mounted) return;
+    }
     return _push<void>(
       context,
       (_) => ServiceFormScreen(
+        initialVehicleId: vehicleId,
+        initialOdometer: odometer,
         service: service,
         preselectedMaintenanceItemId: preselectedMaintenanceItemId,
       ),
     );
   }
 
+  static Future<void> openReminders(
+    BuildContext context, {
+    String? vehicleId,
+  }) =>
+      _push<void>(context, (_) => RemindersScreen(initialVehicleId: vehicleId));
+
   static Future<void> openMaintenance(BuildContext context) {
     return _push<void>(context, (_) => const MaintenanceScreen());
   }
 
-  static Future<void> openDocuments(BuildContext context) {
-    return _push<void>(context, (_) => const DocumentsScreen());
+  static Future<void> openDocuments(BuildContext context, {String? vehicleId}) {
+    return _push<void>(context, (_) => DocumentsScreen(vehicleId: vehicleId));
   }
 
-  static Future<VehicleDocument?> openAddDocument(BuildContext context) {
-    return _push<VehicleDocument>(context, (_) => const DocumentFormScreen());
+  static Future<VehicleDocument?> openAddDocument(
+    BuildContext context, {
+    String? vehicleId,
+    String? category,
+  }) {
+    return _push<VehicleDocument>(
+      context,
+      (_) =>
+          DocumentFormScreen(vehicleId: vehicleId, initialCategory: category),
+    );
   }
 
   static Future<VehicleDocument?> openEditDocument(

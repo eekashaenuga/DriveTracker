@@ -12,13 +12,21 @@ import '../../attachments/domain/attachment.dart';
 import '../../attachments/presentation/attachment_panel.dart';
 import '../../vehicles/domain/vehicle.dart';
 import '../domain/vehicle_document.dart';
+import '../domain/document_type.dart';
 
 class DocumentFormScreen extends StatefulWidget {
-  const DocumentFormScreen({this.document, this.renewingFrom, super.key})
-    : assert(document == null || renewingFrom == null);
+  const DocumentFormScreen({
+    this.document,
+    this.renewingFrom,
+    this.vehicleId,
+    this.initialCategory,
+    super.key,
+  }) : assert(document == null || renewingFrom == null);
 
   final VehicleDocument? document;
   final VehicleDocument? renewingFrom;
+  final String? vehicleId;
+  final String? initialCategory;
 
   @override
   State<DocumentFormScreen> createState() => _DocumentFormScreenState();
@@ -38,6 +46,10 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
   DateReminderSchedule? _schedule;
   String? _formError;
   bool _didDefaultFromController = false;
+  bool _expiryConfigured = false;
+  DocumentType get _type => DocumentType.classify(_categoryController.text);
+  bool get _replace =>
+      !_type.requiresDate && _expiryDate == null && _source?.expiryDate == null;
 
   bool get _isEditing => widget.document != null;
   bool get _isRenewing => widget.renewingFrom != null;
@@ -47,11 +59,13 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
   void initState() {
     super.initState();
     final document = _source;
-    _vehicleId = document?.vehicleId;
+    _vehicleId = document?.vehicleId ?? widget.vehicleId;
     _schedule = document?.reminderSchedule;
     _categoryController.text =
-        document?.category ?? defaultDocumentCategories.first;
-    _titleController.text = document?.title ?? '';
+        document?.category ??
+        widget.initialCategory ??
+        defaultDocumentCategories.first;
+    _titleController.text = document?.title ?? _type.defaultTitle;
     _providerController.text = document?.provider ?? '';
     _referenceController.text = _isRenewing
         ? ''
@@ -59,6 +73,7 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
     _notesController.text = _isRenewing ? '' : document?.notes ?? '';
     _issueDate = _isRenewing ? null : document?.issueDate;
     _expiryDate = _isRenewing ? null : document?.expiryDate;
+    _expiryConfigured = _expiryDate != null;
   }
 
   @override
@@ -101,7 +116,9 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
           ),
           child: DTPrimaryButton(
             key: const Key('saveDocumentButton'),
-            label: _isRenewing ? 'Save renewal' : 'Save document',
+            label: _isRenewing
+                ? (_replace ? 'Save replacement' : 'Save renewal')
+                : 'Save document',
             icon: Icons.check_rounded,
             isLoading: controller.isBusy,
             onPressed: controller.isBusy ? null : _save,
@@ -154,9 +171,13 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
                       label: Text(category),
                       selected: _categoryController.text == category,
                       onSelected: (_) => setState(() {
+                        final previousTitle = _type.defaultTitle;
                         _categoryController.text = category;
+                        if (_titleController.text == previousTitle) {
+                          _titleController.text = _type.defaultTitle;
+                        }
                         if (!_isEditing) {
-                          _schedule = category == 'MOT'
+                          _schedule = _type == DocumentType.mot
                               ? DateReminderSchedule.mot
                               : DateReminderSchedule.standard;
                         }
@@ -168,6 +189,7 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
               TextFormField(
                 key: const Key('documentCategoryField'),
                 controller: _categoryController,
+                onChanged: (_) => setState(() {}),
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(labelText: 'Category'),
                 validator: (value) => (value ?? '').trim().isEmpty
@@ -193,24 +215,44 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
               const SizedBox(height: DTSpacing.md),
               DTDateField(
                 fieldKey: const Key('documentIssueDateField'),
-                label: 'Issue date',
+                label: _type.issueLabel,
                 value: _issueDate,
                 currentDate: controller.currentTime,
                 onChanged: (value) => setState(() => _issueDate = value),
               ),
+              if (_type.requiresDate)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: DTSpacing.sm),
+                  child: Text('User-recorded information'),
+                ),
               const SizedBox(height: DTSpacing.md),
-              DTDateField(
-                fieldKey: const Key('documentExpiryDateField'),
-                label: 'Expiry date',
-                value: _expiryDate,
-                currentDate: controller.currentTime,
-                onChanged: (value) => setState(() => _expiryDate = value),
-              ),
+              if (!_type.requiresDate && _expiryDate == null)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Record an expiry date'),
+                  value: _expiryConfigured,
+                  onChanged: (value) =>
+                      setState(() => _expiryConfigured = value),
+                ),
+              if (_type.requiresDate ||
+                  _expiryConfigured ||
+                  _expiryDate != null)
+                DTDateField(
+                  fieldKey: const Key('documentExpiryDateField'),
+                  label: _type.dateLabel,
+                  value: _expiryDate,
+                  currentDate: controller.currentTime,
+                  onChanged: (value) => setState(() => _expiryDate = value),
+                ),
               const SizedBox(height: DTSpacing.lg),
               if (_expiryDate != null) ...[
                 DateReminderEditor(
-                  value: _schedule ?? DateReminderSchedule.standard,
-                  showMotPreset: _categoryController.text == 'MOT',
+                  value:
+                      _schedule ??
+                      (_type == DocumentType.mot && !_isEditing
+                          ? DateReminderSchedule.mot
+                          : DateReminderSchedule.standard),
+                  showMotPreset: _type == DocumentType.mot,
                   onChanged: (value) => setState(() => _schedule = value),
                 ),
                 const SizedBox(height: DTSpacing.lg),
@@ -226,16 +268,14 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
                 key: const Key('documentProviderField'),
                 controller: _providerController,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Provider'),
+                decoration: InputDecoration(labelText: _type.providerLabel),
               ),
               const SizedBox(height: DTSpacing.md),
               TextFormField(
                 key: const Key('documentReferenceField'),
                 controller: _referenceController,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Reference number',
-                ),
+                decoration: InputDecoration(labelText: _type.referenceLabel),
               ),
               const SizedBox(height: DTSpacing.md),
               TextFormField(
@@ -253,7 +293,10 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
                   parentId: widget.document!.id,
                 )
               else
-                _AttachmentAfterSaveHint(isRenewing: _isRenewing),
+                _AttachmentAfterSaveHint(
+                  isRenewing: _isRenewing,
+                  isReplacement: _replace,
+                ),
               if (_formError != null) ...[
                 const SizedBox(height: DTSpacing.lg),
                 Text(
@@ -273,7 +316,7 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
 
   String get _title {
     if (_isRenewing) {
-      return 'Renew document';
+      return _replace ? 'Replace document' : 'Renew document';
     }
     if (_isEditing) {
       return 'Edit document';
@@ -319,7 +362,11 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
       Navigator.of(context).pop(saved);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_isRenewing ? 'Document renewed.' : 'Document saved.'),
+          content: Text(
+            _isRenewing
+                ? (_replace ? 'Document replaced.' : 'Document renewed.')
+                : 'Document saved.',
+          ),
         ),
       );
     } on ValidationException catch (error) {
@@ -347,9 +394,13 @@ class _DocumentFormScreenState extends State<DocumentFormScreen> {
 }
 
 class _AttachmentAfterSaveHint extends StatelessWidget {
-  const _AttachmentAfterSaveHint({required this.isRenewing});
+  const _AttachmentAfterSaveHint({
+    required this.isRenewing,
+    required this.isReplacement,
+  });
 
   final bool isRenewing;
+  final bool isReplacement;
 
   @override
   Widget build(BuildContext context) {
@@ -366,7 +417,7 @@ class _AttachmentAfterSaveHint extends StatelessWidget {
             Expanded(
               child: Text(
                 isRenewing
-                    ? 'Save the renewal, then attach the new file from its document details.'
+                    ? 'Save the ${isReplacement ? 'replacement' : 'renewal'}, then attach the new file from its document details.'
                     : 'Save this document, then add PDFs or images from its details.',
                 style: Theme.of(context).textTheme.bodyMedium
                     ?.copyWith(color: colors.onSurfaceVariant),

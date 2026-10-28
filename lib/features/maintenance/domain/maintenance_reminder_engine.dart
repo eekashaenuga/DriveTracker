@@ -69,8 +69,12 @@ class MaintenanceReminderEngine {
     if (!item.isArchived &&
         timeIntervalDays != null &&
         latestCompletion != null) {
-      nextDateDue = _dateOnly(latestCompletion.eventDateTime)
-          .add(Duration(days: timeIntervalDays));
+      final baseline = _dateOnly(latestCompletion.eventDateTime);
+      nextDateDue = DateTime(
+        baseline.year,
+        baseline.month,
+        baseline.day + timeIntervalDays,
+      );
       daysRemaining = calendarDaysBetween(nextDateDue, asOf);
       dateState = _stateForDays(
         daysRemaining,
@@ -122,13 +126,22 @@ class MaintenanceReminderEngine {
       if (stateCompare != 0) {
         return stateCompare;
       }
-      final aDistance = _closestPositive(a.milesRemaining, a.daysRemaining);
-      final bDistance = _closestPositive(b.milesRemaining, b.daysRemaining);
-      final distanceCompare = aDistance.compareTo(bDistance);
+      // Dates and vehicle distance are different dimensions. Date-bearing
+      // records form the first deterministic subgroup, then mileage-only items.
+      final basisCompare = (a.nextDateDue == null ? 1 : 0).compareTo(
+        b.nextDateDue == null ? 1 : 0,
+      );
+      if (basisCompare != 0) return basisCompare;
+      final distanceCompare = a.nextDateDue != null && b.nextDateDue != null
+          ? a.nextDateDue!.compareTo(b.nextDateDue!)
+          : (a.milesRemaining ?? (1 << 62)).compareTo(
+              b.milesRemaining ?? (1 << 62),
+            );
       if (distanceCompare != 0) {
         return distanceCompare;
       }
-      return a.item.name.compareTo(b.item.name);
+      final name = a.item.name.compareTo(b.item.name);
+      return name != 0 ? name : a.item.id.compareTo(b.item.id);
     });
     return sorted;
   }
@@ -208,17 +221,8 @@ class MaintenanceReminderEngine {
     return b.createdAt.compareTo(a.createdAt);
   }
 
-  int _closestPositive(int? miles, int? days) {
-    final values = [?miles, ?days];
-    if (values.isEmpty) {
-      return 1 << 30;
-    }
-    values.sort();
-    return values.first;
-  }
-
   DateTime _dateOnly(DateTime value) {
-    final utc = value.toUtc();
-    return DateTime.utc(utc.year, utc.month, utc.day);
+    final local = value.toLocal();
+    return DateTime(local.year, local.month, local.day);
   }
 }

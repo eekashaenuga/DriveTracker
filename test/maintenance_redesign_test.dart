@@ -153,7 +153,7 @@ void main() {
                     asOf: DateTime(2026, 2),
                   )).single;
               expect(reminder.nextMileageDue, 72000);
-              expect(reminder.nextDateDue, DateTime.utc(2027, 1, 1));
+              expect(reminder.nextDateDue, DateTime(2027, 1, 1));
             } finally {
               await services.attachmentRoot.delete(recursive: true);
             }
@@ -290,7 +290,16 @@ void main() {
         category: 'MOT',
         title: 'Certificate',
         expiryDate: DateTime(2026, 10, 25),
+        reminderSchedule: const DateReminderSchedule(),
       ),
+    );
+    // Represent a pre-M2 duplicate: existing schedules must remain intact until
+    // the user explicitly resolves them. New creation is guarded by M2.
+    await (await services.database.database).update(
+      'documents',
+      {'reminder_schedule': DateReminderSchedule.mot.toJson()},
+      where: 'id = ?',
+      whereArgs: [doc.id],
     );
     final first = await scheduler.reconcile(enabled: true);
     expect(first.scheduled, hasLength(22));
@@ -506,7 +515,7 @@ void main() {
     },
   );
 
-  test('expiry urgency orders overdue, due, due soon, upcoming then setup', () {
+  test('overview orders overdue, due, due soon, setup then upcoming', () {
     const engine = MaintenanceReminderEngine();
     final now = DateTime(2026, 10, 18);
     MaintenanceItem expiry(String id, DateTime? due) => MaintenanceItem(
@@ -541,8 +550,8 @@ void main() {
       'overdue',
       'due',
       'soon',
-      'upcoming',
       'setup',
+      'upcoming',
     ]);
     expect(engine.mostUrgent(reminders)!.item.id, 'overdue');
   });
@@ -560,6 +569,21 @@ void main() {
               timeIntervalDays: 365,
             ),
           );
+      await expectLater(
+        services.maintenanceItemService.createMaintenanceItem(
+          _mot(vehicle.id, DateTime(2026, 10, 25)),
+        ),
+        throwsA(isA<ValidationException>()),
+      );
+      await services.maintenanceItemService.updateMaintenanceItem(
+        legacy.id,
+        MaintenanceItemDraft(
+          vehicleId: vehicle.id,
+          name: 'MOT',
+          timeIntervalDays: 365,
+          reminderEnabled: false,
+        ),
+      );
       final expiry = await services.maintenanceItemService
           .createMaintenanceItem(_mot(vehicle.id, DateTime(2026, 10, 25)));
       expect(expiry.id, isNot(legacy.id));

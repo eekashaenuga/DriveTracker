@@ -1,3 +1,7 @@
+import 'notification_target.dart';
+
+import 'package:flutter/services.dart';
+
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -44,6 +48,15 @@ abstract class LocalNotificationClient {
   Future<void> cancel(int id);
 }
 
+abstract class NotificationInteractionClient {
+  set onNotificationTap(void Function(NotificationTarget)? callback);
+  Future<NotificationTarget?> launchTarget();
+  Future<String?> refreshTimezone();
+  String? get timezoneWarning;
+  Future<bool> openNotificationSettings();
+  Future<List<int>> activeNotificationIds();
+}
+
 LocalNotificationClient defaultLocalNotificationClient() {
   if (!kIsWeb && Platform.isAndroid) {
     return FlutterLocalNotificationClient();
@@ -80,7 +93,8 @@ class NoopLocalNotificationClient implements LocalNotificationClient {
   Future<void> cancel(int id) async {}
 }
 
-class FlutterLocalNotificationClient implements LocalNotificationClient {
+class FlutterLocalNotificationClient
+    implements LocalNotificationClient, NotificationInteractionClient {
   FlutterLocalNotificationClient({FlutterLocalNotificationsPlugin? plugin})
     : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
@@ -106,6 +120,59 @@ class FlutterLocalNotificationClient implements LocalNotificationClient {
 
   final FlutterLocalNotificationsPlugin _plugin;
   bool _initialized = false;
+  void Function(NotificationTarget)? _onTap;
+  String? _timezoneWarning;
+  @override
+  String? get timezoneWarning => _timezoneWarning;
+  @override
+  set onNotificationTap(void Function(NotificationTarget)? callback) =>
+      _onTap = callback;
+  @override
+  Future<NotificationTarget?> launchTarget() async {
+    if (!isSupported) return null;
+    await initialize();
+    final details = await _plugin.getNotificationAppLaunchDetails();
+    if (details?.didNotificationLaunchApp != true) return null;
+    return NotificationTarget.parse(details?.notificationResponse?.payload) ??
+        const NotificationTarget.overview();
+  }
+
+  @override
+  Future<String?> refreshTimezone() async {
+    tz_data.initializeTimeZones();
+    try {
+      final zone = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(zone.identifier));
+      _timezoneWarning = null;
+      return zone.identifier;
+    } catch (_) {
+      tz.setLocalLocation(tz.UTC);
+      _timezoneWarning =
+          'Local timezone could not be confirmed. Retry synchronization.';
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> openNotificationSettings() async {
+    try {
+      return await const MethodChannel('drivetracker/notification_settings')
+              .invokeMethod<bool>('open') ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<List<int>> activeNotificationIds() async {
+    if (!isSupported) return const [];
+    await initialize();
+    return (await _plugin.getActiveNotifications())
+        .map((n) => n.id)
+        .whereType<int>()
+        .toList();
+  }
 
   @override
   bool get isSupported => !kIsWeb && Platform.isAndroid;
@@ -116,15 +183,14 @@ class FlutterLocalNotificationClient implements LocalNotificationClient {
       return;
     }
 
-    tz_data.initializeTimeZones();
-    try {
-      final timeZone = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timeZone.identifier));
-    } catch (_) {
-      tz.setLocalLocation(tz.UTC);
-    }
-
-    await _plugin.initialize(settings: _initializationSettings);
+    await refreshTimezone();
+    await _plugin.initialize(
+      settings: _initializationSettings,
+      onDidReceiveNotificationResponse: (response) => _onTap?.call(
+        NotificationTarget.parse(response.payload) ??
+            const NotificationTarget.overview(),
+      ),
+    );
     _initialized = true;
   }
 

@@ -1,3 +1,5 @@
+import '../features/documents/domain/vehicle_document_overview.dart';
+import '../core/notifications/notification_target.dart';
 import '../features/daily_records/data/income_activity_expense_repository.dart';
 import '../features/daily_records/domain/income_earnings.dart';
 
@@ -169,8 +171,14 @@ class DriveTrackerController extends ChangeNotifier {
       fileBridge: dataSafetyFileBridge,
       clock: () => _clock().toUtc(),
     );
+    _notificationClient =
+        notificationClient ?? defaultLocalNotificationClient();
+    if (_notificationClient is NotificationInteractionClient) {
+      (_notificationClient as NotificationInteractionClient).onNotificationTap =
+          receiveNotificationTarget;
+    }
     _notificationScheduler = ReminderNotificationScheduler(
-      client: notificationClient ?? defaultLocalNotificationClient(),
+      client: _notificationClient,
       vehicleRepository: _vehicleRepository,
       odometerRepository: _odometerRepository,
       maintenanceItemService: _maintenanceItemService,
@@ -212,6 +220,92 @@ class DriveTrackerController extends ChangeNotifier {
   late final ServiceRecordService _serviceRecordService;
   late final DataSafetyService _dataSafetyService;
   late final ReminderNotificationScheduler _notificationScheduler;
+  late final LocalNotificationClient _notificationClient;
+  final List<NotificationTarget> _notificationTargets = [];
+  String? notificationSyncError;
+  String? notificationTimezoneWarning;
+  int notificationFailureCount = 0;
+  DateTime? lastNotificationSync;
+  Future<void>? _environmentRefresh;
+  String? _environmentZone;
+  String? get reminderTimezone => _environmentZone;
+  String? _environmentDate;
+  bool _launchTargetRead = false;
+  List<NotificationTarget> takeNotificationTargets() {
+    final result = [..._notificationTargets];
+    _notificationTargets.clear();
+    return result;
+  }
+
+  void receiveNotificationTarget(NotificationTarget target) {
+    if (_disposed) return;
+    _notificationTargets.add(target);
+    notifyListeners();
+  }
+
+  Future<bool> openAndroidNotificationSettings() async =>
+      _notificationClient is NotificationInteractionClient
+      ? (_notificationClient as NotificationInteractionClient)
+            .openNotificationSettings()
+      : false;
+  String get notificationHealthLabel {
+    if (!localNotificationsSupported) {
+      return 'Notifications are available on Android.';
+    }
+    if (notificationSyncError != null) {
+      return 'Notification synchronization failed. In-app reminders still work.';
+    }
+    if (localNotificationPermissionStatus ==
+        LocalNotificationPermissionStatus.denied) {
+      return 'Android notification permission is denied. In-app reminders still work.';
+    }
+    if (!localReminderNotificationsPreferred) {
+      return 'Android notifications are off. In-app reminders still work.';
+    }
+    if (notificationFailureCount > 0 || notificationTimezoneWarning != null) {
+      return 'Some notifications could not be synchronized. Retry.';
+    }
+    if (localNotificationPermissionStatus !=
+        LocalNotificationPermissionStatus.granted) {
+      return 'Notification initialization is not ready. Retry.';
+    }
+    return 'Date notifications target local 09:00; Android delivery may be later.';
+  }
+
+  Future<void> refreshReminderEnvironment({bool force = false}) {
+    if (_environmentRefresh != null) return _environmentRefresh!;
+    final now = _clock();
+    final day = '${now.year}-${now.month}-${now.day}';
+    if (!force &&
+        lastNotificationSync != null &&
+        now.difference(lastNotificationSync!).inMilliseconds.abs() < 2000 &&
+        _environmentDate == day) {
+      return Future.value();
+    }
+    return _environmentRefresh = _refreshReminderEnvironment(day)
+        .whenComplete(() => _environmentRefresh = null);
+  }
+
+  Future<void> _refreshReminderEnvironment(String day) async {
+    try {
+      String? zone;
+      if (_notificationClient is NotificationInteractionClient) {
+        final client = _notificationClient as NotificationInteractionClient;
+        zone = await client.refreshTimezone();
+        notificationTimezoneWarning = client.timezoneWarning;
+      }
+      await _refreshNotificationStatus();
+      if (_disposed) return;
+      // A real resume is bounded/coalesced; reloading also refreshes derived Home state.
+      _environmentZone = zone ?? _clock().timeZoneName;
+      _environmentDate = day;
+      await _reloadData();
+      await _reconcileNotificationsBestEffort();
+    } catch (_) {
+      notificationSyncError = 'Could not refresh reminder state.';
+    }
+    if (!_disposed) notifyListeners();
+  }
 
   bool _initialized = false;
   bool _disposed = false;
@@ -453,6 +547,27 @@ class DriveTrackerController extends ChangeNotifier {
     );
   }
 
+  Future<List<MaintenanceReminder>> maintenanceRemindersForVehicle(
+    String id,
+  ) async => _maintenanceItemService.remindersForVehicle(
+    id,
+    currentOdometer: await currentOdometerForVehicle(id),
+    asOf: _clock(),
+  );
+  Future<List<DocumentExpiryReminder>> documentRemindersForVehicle(String id) =>
+      _documentService.remindersForVehicle(id, asOf: _clock());
+  Future<bool> hasMotConflict(String vehicleId) async {
+    final documents = await _documentRepository.listForVehicle(vehicleId);
+    final maintenance = await _maintenanceItemRepository.listForVehicle(
+      vehicleId,
+    );
+    return VehicleDocumentOverview(
+      vehicleId: vehicleId,
+      documents: documents,
+      maintenance: maintenance,
+    ).motNeedsReview;
+  }
+
   Future<List<MaintenanceReminder>> maintenanceRemindersForSelectedVehicle() {
     final vehicle = selectedVehicle;
     if (vehicle == null) {
@@ -461,6 +576,7 @@ class DriveTrackerController extends ChangeNotifier {
     return _maintenanceItemService.remindersForVehicle(
       vehicle.id,
       currentOdometer: currentOdometer,
+      asOf: _clock(),
     );
   }
 
@@ -520,6 +636,10 @@ class DriveTrackerController extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_notificationClient is NotificationInteractionClient) {
+      (_notificationClient as NotificationInteractionClient).onNotificationTap =
+          null;
+    }
     _disposed = true;
     super.dispose();
   }
@@ -1000,7 +1120,13 @@ class DriveTrackerController extends ChangeNotifier {
         return;
       }
 
-      final permission = await _notificationScheduler.requestPermission();
+      LocalNotificationPermissionStatus permission;
+      try {
+        permission = await _notificationScheduler.requestPermission();
+      } catch (_) {
+        notificationSyncError = 'Notification initialization failed. Retry.';
+        return;
+      }
       _localNotificationPermissionStatus = permission;
       final granted = permission == LocalNotificationPermissionStatus.granted;
       _localReminderNotificationsEnabled = granted;
@@ -1056,8 +1182,7 @@ class DriveTrackerController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _localNotificationPermissionStatus =
-          LocalNotificationPermissionStatus.unsupported;
+      notificationSyncError = 'Notification initialization failed. Retry.';
     }
   }
 
@@ -1078,6 +1203,15 @@ class DriveTrackerController extends ChangeNotifier {
       final result = await _notificationScheduler.reconcile(
         enabled: _localReminderNotificationsEnabled,
       );
+      await _readNotificationLaunchTarget();
+      notificationSyncError = null;
+      notificationFailureCount = result.failures.length;
+      lastNotificationSync = _clock();
+      if (_notificationClient is NotificationInteractionClient) {
+        notificationTimezoneWarning =
+            (_notificationClient as NotificationInteractionClient)
+                .timezoneWarning;
+      }
       if (result.scheduled.isNotEmpty ||
           result.cancelledIds.isNotEmpty ||
           _localReminderNotificationsEnabled) {
@@ -1087,9 +1221,20 @@ class DriveTrackerController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
-      _localNotificationPermissionStatus =
-          LocalNotificationPermissionStatus.unsupported;
+      notificationSyncError = 'Could not synchronize notifications. In-app reminders remain available.';
     }
+  }
+
+  Future<void> _readNotificationLaunchTarget() async {
+    if (_disposed ||
+        _launchTargetRead ||
+        _notificationClient is! NotificationInteractionClient) {
+      return;
+    }
+    final target = await (_notificationClient as NotificationInteractionClient)
+        .launchTarget();
+    _launchTargetRead = true;
+    if (target != null && !_disposed) receiveNotificationTarget(target);
   }
 
   void _startPostStartupNotificationSync() {
@@ -1103,6 +1248,13 @@ class DriveTrackerController extends ChangeNotifier {
         return;
       }
       await _reconcileNotificationsBestEffort();
+      if (!_disposed) {
+        try {
+          await _readNotificationLaunchTarget();
+        } catch (_) {
+          notificationSyncError = 'Notification initialization failed. Retry.';
+        }
+      }
       if (!_disposed) {
         notifyListeners();
       }

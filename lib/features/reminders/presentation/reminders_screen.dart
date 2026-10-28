@@ -1,6 +1,10 @@
+import 'notification_health_panel.dart';
 import '../domain/reminder_overview.dart';
 
 import 'package:flutter/material.dart';
+
+import '../../documents/domain/document_type.dart';
+
 import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
@@ -16,48 +20,59 @@ import '../../documents/domain/vehicle_document.dart';
 import '../../maintenance/domain/maintenance_reminder.dart';
 import '../../vehicles/domain/vehicle.dart';
 
-class RemindersScreen extends StatefulWidget {
-  const RemindersScreen({super.key});
+enum ReminderTypeFilter { all, maintenance, documents }
 
+class RemindersScreen extends StatefulWidget {
+  const RemindersScreen({this.initialVehicleId, super.key});
+  final String? initialVehicleId;
   @override
   State<RemindersScreen> createState() => _RemindersScreenState();
 }
 
 class _RemindersScreenState extends State<RemindersScreen> {
+  static const _all = '__all__';
   Future<_ReminderBundle>? _remindersFuture;
-  String? _loadedVehicleId;
-  int? _loadedRevision;
-
+  String? _scope, _signature;
+  bool _localScope = false;
+  ReminderTypeFilter _type = ReminderTypeFilter.all;
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<DriveTrackerController>();
-    final vehicle = controller.selectedVehicle;
-
-    if (vehicle == null) {
+    final c = context.watch<DriveTrackerController>();
+    final vehicles = c.activeVehicles;
+    _scope ??= widget.initialVehicleId ?? c.selectedVehicle?.id ?? _all;
+    if (!_localScope && widget.initialVehicleId == null) {
+      _scope = c.selectedVehicle?.id ?? _all;
+    }
+    if (_scope != _all && !vehicles.any((v) => v.id == _scope)) _scope = _all;
+    if (vehicles.isEmpty) {
       return const Scaffold(
         body: SafeArea(
           child: DTEmptyState(
             icon: Icons.notifications_none_rounded,
             title: 'No active vehicle',
-            body: 'Select an active vehicle before reviewing reminders.',
+            body: 'Add or restore a vehicle before reviewing reminders.',
           ),
         ),
       );
     }
-
-    if (_remindersFuture == null ||
-        _loadedVehicleId != vehicle.id ||
-        _loadedRevision != controller.dataRevision) {
-      _loadedRevision = controller.dataRevision;
-      _loadedVehicleId = vehicle.id;
-      _remindersFuture = _loadReminders(controller);
+    final ids = vehicles
+        .where((v) => _scope == _all || v.id == _scope)
+        .map((v) => v.id)
+        .toList();
+    final signature = '$_scope:${c.dataRevision}';
+    if (_remindersFuture == null || signature != _signature) {
+      _signature = signature;
+      _remindersFuture = _loadReminders(c, ids);
     }
-
+    Vehicle vehicleFor(ReminderOverviewEntry e) =>
+        vehicles.firstWhere((v) => v.id == e.vehicleId);
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: ListView(
+            key: const Key('remindersList'),
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(
               DTSpacing.lg,
               DTSpacing.lg,
@@ -70,65 +85,146 @@ class _RemindersScreenState extends State<RemindersScreen> {
                 style: Theme.of(context).textTheme.headlineMedium
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: DTSpacing.xs),
-              Text(
-                vehicle.name,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: ValueKey('remindersVehicle_$_scope'),
+                initialValue: _scope,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Vehicle'),
+                items: [
+                  const DropdownMenuItem(
+                    value: _all,
+                    child: Text('All active vehicles'),
+                  ),
+                  for (final v in vehicles)
+                    DropdownMenuItem(
+                      value: v.id,
+                      child: Text(v.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (value) => setState(() {
+                  _scope = value;
+                  _localScope = true;
+                }),
               ),
-              const SizedBox(height: DTSpacing.lg),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<ReminderTypeFilter>(
+                key: ValueKey('remindersTypeFilter_${_type.name}'),
+                initialValue: _type,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Reminder type'),
+                items: [
+                  const DropdownMenuItem(
+                    value: ReminderTypeFilter.all,
+                    child: Text('All'),
+                  ),
+                  const DropdownMenuItem(
+                    value: ReminderTypeFilter.maintenance,
+                    child: Text('Maintenance'),
+                  ),
+                  const DropdownMenuItem(
+                    value: ReminderTypeFilter.documents,
+                    child: Text('Documents'),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _type = value!),
+              ),
+              NotificationHealthPanel(),
               FutureBuilder<_ReminderBundle>(
+                key: ValueKey(_scope),
                 future: _remindersFuture,
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Column(
+                      children: [
+                        const DTEmptyState(
+                          icon: Icons.error_outline,
+                          title: 'Could not load reminders',
+                          body: 'Your records are unchanged. Retry loading reminders.',
+                        ),
+                        TextButton(
+                          onPressed: _refresh,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    );
+                  }
                   final bundle = snapshot.data;
-                  if (bundle == null) {
+                  if (snapshot.connectionState != ConnectionState.done ||
+                      bundle == null) {
                     return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: DTSpacing.xl),
+                      padding: EdgeInsets.all(24),
                       child: Center(child: CircularProgressIndicator()),
                     );
                   }
-                  final visible = bundle.maintenance
-                      .where((reminder) => reminder.shouldShowAsReminder)
-                      .toList();
-                  final visibleDocuments = bundle.documents
-                      .where((reminder) => reminder.shouldShowAsReminder)
-                      .toList();
-                  if (visible.isEmpty && visibleDocuments.isEmpty) {
+                  final ordered = orderReminderOverview(
+                    bundle.maintenance,
+                    bundle.documents,
+                  );
+                  final filtered = ordered.where((entry) {
+                    final sources = entry.isMotReview
+                        ? entry.motSources
+                        : [entry];
+                    return _type == ReminderTypeFilter.all ||
+                        sources.any(
+                          (s) => _type == ReminderTypeFilter.maintenance
+                              ? s.maintenance != null
+                              : s.document != null,
+                        );
+                  }).toList();
+                  if (ordered.isEmpty) {
                     return const DTEmptyState(
                       icon: Icons.notifications_none_rounded,
                       title: 'No active reminders',
-                      body: 'Add maintenance intervals or document expiry dates to track upcoming work.',
+                      body: 'No configured reminders for these vehicles. Add maintenance intervals or document dates; Android notifications are separate.',
                     );
                   }
-
-                  final ordered = orderReminderOverview(
-                    visible,
-                    visibleDocuments,
-                  );
+                  if (filtered.isEmpty) {
+                    return Column(
+                      children: [
+                        const DTEmptyState(
+                          icon: Icons.filter_list,
+                          title: 'No reminders match these filters',
+                          body:
+                              'Other reminder types may still need attention.',
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              setState(() => _type = ReminderTypeFilter.all),
+                          child: const Text('Show all types'),
+                        ),
+                      ],
+                    );
+                  }
                   return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (var i = 0; i < ordered.length; i++) ...[
-                        if (i == 0 || ordered[i].state != ordered[i - 1].state)
-                          DTSectionHeader(
-                            title:
-                                ordered[i].state ==
-                                    MaintenanceReminderState.normal
-                                ? 'All good'
-                                : ordered[i].state.label,
-                          ),
-                        if (ordered[i].maintenance != null)
+                      for (var i = 0; i < filtered.length; i++) ...[
+                        if (i == 0 ||
+                            filtered[i].sectionTitle !=
+                                filtered[i - 1].sectionTitle)
+                          DTSectionHeader(title: filtered[i].sectionTitle),
+                        if (filtered[i].isMotReview)
+                          _MotSourcesReminder(
+                            entry: filtered[i],
+                            vehicle: vehicleFor(filtered[i]),
+                            onRefresh: _refresh,
+                          )
+                        else if (filtered[i].maintenance != null)
                           _ReminderSection(
                             title: '',
-                            reminders: [ordered[i].maintenance!],
-                            vehicle: vehicle,
+                            reminders: [filtered[i].maintenance!],
+                            vehicle: vehicleFor(filtered[i]),
+                            showVehicle: _scope == _all,
                             onRefresh: _refresh,
                           )
                         else
                           _DocumentReminderSection(
                             title: '',
-                            reminders: [ordered[i].document!],
+                            reminders: [filtered[i].document!],
+                            vehicleName: _scope == _all
+                                ? vehicleFor(filtered[i]).name
+                                : null,
                             onRefresh: _refresh,
                           ),
                       ],
@@ -144,20 +240,33 @@ class _RemindersScreenState extends State<RemindersScreen> {
   }
 
   Future<void> _refresh() async {
-    final controller = context.read<DriveTrackerController>();
-    final future = _loadReminders(controller);
+    if (!mounted) return;
+    final c = context.read<DriveTrackerController>();
+    final ids = c.activeVehicles
+        .where((v) => _scope == _all || v.id == _scope)
+        .map((v) => v.id)
+        .toList();
+    final future = _loadReminders(c, ids);
     setState(() {
       _remindersFuture = future;
     });
-    await future;
+    try {
+      await future;
+    } catch (_) {
+      /* FutureBuilder owns the retry state. */
+    }
   }
 
   Future<_ReminderBundle> _loadReminders(
-    DriveTrackerController controller,
+    DriveTrackerController c,
+    List<String> ids,
   ) async {
-    final maintenance = await controller
-        .maintenanceRemindersForSelectedVehicle();
-    final documents = await controller.documentRemindersForSelectedVehicle();
+    final maintenance = <MaintenanceReminder>[];
+    final documents = <DocumentExpiryReminder>[];
+    for (final id in ids) {
+      maintenance.addAll(await c.maintenanceRemindersForVehicle(id));
+      documents.addAll(await c.documentRemindersForVehicle(id));
+    }
     return _ReminderBundle(maintenance: maintenance, documents: documents);
   }
 }
@@ -171,12 +280,14 @@ class _ReminderBundle {
 
 class _ReminderSection extends StatelessWidget {
   const _ReminderSection({
+    this.showVehicle = false,
     required this.title,
     required this.reminders,
     required this.vehicle,
     required this.onRefresh,
   });
 
+  final bool showVehicle;
   final String title;
   final List<MaintenanceReminder> reminders;
   final Vehicle vehicle;
@@ -198,7 +309,10 @@ class _ReminderSection extends StatelessWidget {
             child: DTListCard(
               icon: _iconForState(reminder.state),
               title: reminder.item.name,
-              subtitle: _reminderSubtitle(reminder, vehicle),
+              subtitle:
+                  '${showVehicle ? '${vehicle.name} · ' : ''}${_reminderSubtitle(reminder, vehicle)}',
+              subtitleMaxLines: null,
+              stackTrailingOnNarrow: true,
               accentColor: _colorForState(context, reminder.state),
               trailing: _ReminderAction(
                 state: reminder.state,
@@ -206,9 +320,18 @@ class _ReminderSection extends StatelessWidget {
                 icon: reminder.item.isExpiry
                     ? Icons.event_repeat
                     : Icons.build_circle_outlined,
-                label: reminder.item.isExpiry ? 'Renew' : 'Record',
+                label: reminder.state == MaintenanceReminderState.setupNeeded
+                    ? 'Set up'
+                    : reminder.item.isExpiry
+                    ? 'Renew'
+                    : 'Record',
                 onPressed: () async {
-                  if (reminder.item.isExpiry) {
+                  if (reminder.state == MaintenanceReminderState.setupNeeded) {
+                    await AppNavigation.openMaintenanceItemDetails(
+                      context,
+                      reminder.item.id,
+                    );
+                  } else if (reminder.item.isExpiry) {
                     await AppNavigation.openEditMaintenanceItem(
                       context,
                       reminder.item,
@@ -238,11 +361,13 @@ class _ReminderSection extends StatelessWidget {
 
 class _DocumentReminderSection extends StatelessWidget {
   const _DocumentReminderSection({
+    this.vehicleName,
     required this.title,
     required this.reminders,
     required this.onRefresh,
   });
 
+  final String? vehicleName;
   final String title;
   final List<DocumentExpiryReminder> reminders;
   final Future<void> Function() onRefresh;
@@ -261,12 +386,18 @@ class _DocumentReminderSection extends StatelessWidget {
             key: Key('documentReminder_${reminder.document.id}'),
             padding: const EdgeInsets.only(bottom: DTSpacing.sm),
             child: DTListCard(
-              icon: _iconForState(reminder.state),
+              icon: _iconForState(_documentDisplayState(reminder)),
               title: reminder.title,
-              subtitle: _documentReminderSubtitle(reminder),
-              accentColor: _colorForState(context, reminder.state),
+              subtitle:
+                  '${vehicleName == null ? '' : '$vehicleName · '}${_documentReminderSubtitle(reminder)}',
+              subtitleMaxLines: null,
+              stackTrailingOnNarrow: true,
+              accentColor: _colorForState(
+                context,
+                _documentDisplayState(reminder),
+              ),
               trailing: _ReminderAction(
-                state: reminder.state,
+                state: _documentDisplayState(reminder),
                 actionKey: Key('openDocumentReminder_${reminder.document.id}'),
                 icon: Icons.description_outlined,
                 label: 'Open',
@@ -291,6 +422,58 @@ class _DocumentReminderSection extends StatelessWidget {
     );
   }
 }
+
+class _MotSourcesReminder extends StatelessWidget {
+  const _MotSourcesReminder({
+    required this.entry,
+    required this.vehicle,
+    required this.onRefresh,
+  });
+  final ReminderOverviewEntry entry;
+  final Vehicle vehicle;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    final sources = entry.motSources.map((source) {
+      final document = source.document?.document;
+      final maintenance = source.maintenance;
+      final date = document?.expiryDate ?? maintenance?.nextDateDue;
+      final label = document != null
+          ? 'Document: ${document.title}'
+          : 'Maintenance: ${maintenance!.item.name}';
+      final basis = document != null || maintenance!.item.isExpiry
+          ? 'expires'
+          : 'due';
+      return '$label - $basis ${date == null ? 'not recorded' : compactDate(date)}';
+    });
+    return Padding(
+      key: Key('motReminderSources_${vehicle.id}'),
+      padding: const EdgeInsets.only(bottom: DTSpacing.sm),
+      child: DTListCard(
+        icon: Icons.warning_amber_rounded,
+        title: entry.name,
+        subtitle: [
+          '${vehicle.name} · ${entry.state == MaintenanceReminderState.overdue ? 'Overdue · ' : ''}Multiple active MOT sources. Review the user-recorded dates and notification timings.',
+          ...sources,
+        ].join('\n'),
+        subtitleMaxLines: null,
+        accentColor: Theme.of(context).colorScheme.tertiary,
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          await AppNavigation.openDocuments(context, vehicleId: vehicle.id);
+          await onRefresh();
+        },
+      ),
+    );
+  }
+}
+
+MaintenanceReminderState _documentDisplayState(
+  DocumentExpiryReminder reminder,
+) => reminder.state == MaintenanceReminderState.normal
+    ? MaintenanceReminderState.upcoming
+    : reminder.state;
 
 class _ReminderAction extends StatelessWidget {
   const _ReminderAction({
@@ -372,14 +555,23 @@ String _remainingText(MaintenanceReminder reminder, Vehicle vehicle) {
 String _documentReminderSubtitle(DocumentExpiryReminder reminder) {
   final expiry = reminder.document.expiryDate;
   final parts = <String>[
-    reminder.state.label,
-    if (expiry != null) 'Recorded expiry: ${compactDate(expiry)}',
-    _documentRemainingText(reminder.daysRemaining),
+    if (expiry != null)
+      '${reminder.document.type == DocumentType.tax ? 'Due' : 'Expires'} ${compactDate(expiry)}',
+    'User-recorded',
+    _documentRemainingText(
+      reminder.daysRemaining,
+      tax: reminder.document.type == DocumentType.tax,
+    ),
   ];
   return parts.where((part) => part.trim().isNotEmpty).join(' / ');
 }
 
-String _documentRemainingText(int days) {
+String _documentRemainingText(int days, {bool tax = false}) {
+  if (tax) {
+    if (days < 0) return 'Overdue by ${-days} days';
+    if (days == 0) return 'Due today';
+    return 'Due in $days days';
+  }
   if (days < 0) {
     return 'Expired ${-days} days ago';
   }

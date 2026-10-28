@@ -11,6 +11,8 @@ import '../../attachments/domain/attachment.dart';
 import '../../attachments/presentation/attachment_panel.dart';
 import '../../vehicles/domain/vehicle.dart';
 import '../domain/vehicle_document.dart';
+import '../domain/document_type.dart';
+import '../domain/vehicle_document_overview.dart';
 
 class DocumentDetailsScreen extends StatefulWidget {
   const DocumentDetailsScreen({required this.documentId, super.key});
@@ -77,9 +79,14 @@ class _DocumentDetailsScreenState extends State<DocumentDetailsScreen> {
                 tooltip: 'Document actions',
                 itemBuilder: (context) => [
                   if (!document.isArchived)
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: _DocumentAction.renew,
-                      child: Text('Renew'),
+                      child: Text(
+                        !document.type.requiresDate &&
+                                document.expiryDate == null
+                            ? 'Replace'
+                            : 'Renew',
+                      ),
                     ),
                   if (!document.isArchived)
                     const PopupMenuItem(
@@ -307,17 +314,27 @@ class _DetailsSection extends StatelessWidget {
           label: 'Vehicle',
           value: vehicle?.name ?? document.vehicleId,
         ),
+        if (document.type.requiresDate)
+          const _DetailRow(label: 'Information source', value: 'User-recorded'),
         _DetailRow(label: 'Category', value: document.category),
         _DetailRow(
-          label: 'Issue date',
+          label: document.type.issueLabel,
           value: _dateOrBlank(document.issueDate),
         ),
         _DetailRow(
-          label: 'Recorded expiry',
+          label: document.type == DocumentType.tax
+              ? 'Recorded due date'
+              : 'Recorded expiry',
           value: _dateOrBlank(document.expiryDate),
         ),
-        _DetailRow(label: 'Provider', value: document.provider),
-        _DetailRow(label: 'Reference', value: document.referenceNumber),
+        _DetailRow(
+          label: document.type.providerLabel,
+          value: document.provider,
+        ),
+        _DetailRow(
+          label: document.type.referenceLabel,
+          value: document.referenceNumber,
+        ),
         _DetailRow(label: 'Notes', value: document.notes),
         if (document.expiryDate != null)
           _DetailRow(
@@ -439,20 +456,8 @@ String _statusText(
   VehicleDocument document,
   DocumentStatus status,
   BuildContext context,
-) {
-  final days = document.daysUntilExpiry(
-    context.read<DriveTrackerController>().currentTime,
-  );
-  return switch (status) {
-    DocumentStatus.noExpiry => 'No expiry recorded',
-    DocumentStatus.valid when days != null => 'Expires in $days days',
-    DocumentStatus.valid => 'Recorded',
-    DocumentStatus.expiringSoon when days == 0 => 'Expires today',
-    DocumentStatus.expiringSoon when days == 1 => 'Expires tomorrow',
-    DocumentStatus.expiringSoon when days != null => 'Expires in $days days',
-    DocumentStatus.expiringSoon => 'Expiring soon',
-    DocumentStatus.expired when days == -1 => 'Expired yesterday',
-    DocumentStatus.expired when days != null => 'Expired ${-days} days ago',
-    DocumentStatus.expired => 'Expired',
-  };
-}
+) => documentStatusLabel(
+  document.type,
+  document.expiryDate,
+  context.read<DriveTrackerController>().currentTime,
+);

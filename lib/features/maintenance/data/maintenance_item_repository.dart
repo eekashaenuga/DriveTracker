@@ -1,9 +1,16 @@
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../../../core/database/app_database.dart';
+import '../../documents/domain/mot_reminder_guard.dart';
 import '../domain/maintenance_item.dart';
 
 class MaintenanceItemRepository {
+  Future<void> checkMotReminder(String vehicleId, {String? excludingId}) =>
+      ensureNoOtherMotReminder(
+        _database,
+        vehicleId,
+        excludingMaintenanceId: excludingId,
+      );
   MaintenanceItemRepository(this._database);
 
   final AppDatabase _database;

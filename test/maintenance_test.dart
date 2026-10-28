@@ -460,7 +460,7 @@ void main() {
             asOf: DateTime.utc(2026, 9, 5),
           );
       expect(reminders.single.nextMileageDue, 72500);
-      expect(reminders.single.nextDateDue, DateTime.utc(2027, 6, 15));
+      expect(reminders.single.nextDateDue, DateTime(2027, 6, 15));
       expect(reminders.single.milesRemaining, 7500);
       expect(
         await services.financialSummary.monthSpendForVehicle(

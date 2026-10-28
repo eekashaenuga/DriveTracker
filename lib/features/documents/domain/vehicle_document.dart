@@ -1,14 +1,16 @@
 import '../../reminders/domain/date_reminder_schedule.dart';
 import '../../maintenance/domain/maintenance_reminder.dart';
+import 'document_type.dart';
 
 const defaultDocumentCategories = [
   'Insurance',
   'MOT',
-  'V5C',
+  'V5C / Logbook',
+  'Receipt / Invoice',
   'Purchase receipt',
   'Warranty',
   'Breakdown cover',
-  'Tax',
+  'Vehicle tax',
   'Finance / Lease',
   'Other',
 ];
@@ -91,6 +93,8 @@ class VehicleDocument {
   final DateTime? archivedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  DocumentType get type => DocumentType.classify(category);
 
   int? daysUntilExpiry(DateTime asOf) {
     final expiry = expiryDate;
@@ -199,9 +203,18 @@ class DocumentExpiryReminder {
   final MaintenanceReminderState state;
   final int daysRemaining;
 
-  bool get shouldShowAsReminder {
+  // Home attention is urgency-based; Reminders also lists enabled future dates.
+  bool get needsAttention {
     return !document.isArchived &&
+        document.expiryDate != null &&
         state.severity >= MaintenanceReminderState.upcoming.severity;
+  }
+
+  bool get shouldShowAsReminder {
+    // Null preserves the implicit 30-day notification schedule in older data.
+    return !document.isArchived &&
+        document.expiryDate != null &&
+        (needsAttention || (document.reminderSchedule?.isEnabled ?? true));
   }
 
   String get id => 'document_${document.id}';

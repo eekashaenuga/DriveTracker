@@ -20,6 +20,18 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "drivetracker/notification_settings")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "open") { result.notImplemented() }
+                else {
+                    try {
+                        startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
+                        result.success(true)
+                    } catch (_: ActivityNotFoundException) { result.success(false) }
+                }
+            }
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             ATTACHMENTS_CHANNEL

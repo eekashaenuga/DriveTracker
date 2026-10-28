@@ -11,6 +11,8 @@ import '../../attachments/domain/attachment_service.dart';
 import '../../vehicles/data/vehicle_repository.dart';
 import '../data/document_repository.dart';
 import 'vehicle_document.dart';
+import 'document_type.dart';
+import 'mot_reminder_guard.dart';
 
 typedef Clock = DateTime Function();
 
@@ -36,6 +38,7 @@ class DocumentService {
 
   Future<VehicleDocument> createDocument(VehicleDocumentDraft draft) async {
     final clean = await _validateDraft(draft);
+    await _checkMot(clean);
     final now = _clock().toUtc();
     final document = VehicleDocument(
       id: _idGenerator.newId('doc'),
@@ -49,7 +52,7 @@ class DocumentService {
       notes: _cleanOptional(clean.notes),
       reminderSchedule:
           clean.reminderSchedule ??
-          (clean.category.toUpperCase() == 'MOT'
+          (DocumentType.classify(clean.category) == DocumentType.mot
               ? DateReminderSchedule.mot
               : null),
       isArchived: false,
@@ -69,6 +72,16 @@ class DocumentService {
       throw const ValidationException(['Document not found.']);
     }
     final clean = await _validateDraft(draft);
+    if (!existing.isArchived &&
+        (existing.type != DocumentType.mot ||
+            existing.expiryDate == null ||
+            !hasDateNotifications(existing.reminderSchedule))) {
+      await _checkMot(
+        clean,
+        excludingId: existing.id,
+        fallbackSchedule: existing.reminderSchedule,
+      );
+    }
     if (clean.vehicleId != existing.vehicleId) {
       throw const ValidationException([
         'Move attachments by creating a new document for that vehicle.',
@@ -121,6 +134,7 @@ class DocumentService {
       ]);
     }
     final clean = await _validateDraft(renewalDraft);
+    await _checkMot(clean, excludingId: existing.id);
     if (clean.vehicleId != existing.vehicleId) {
       throw const ValidationException([
         'Renewal must stay with the same vehicle.',
@@ -140,7 +154,7 @@ class DocumentService {
       notes: _cleanOptional(clean.notes),
       reminderSchedule:
           clean.reminderSchedule ??
-          (clean.category.toUpperCase() == 'MOT'
+          (DocumentType.classify(clean.category) == DocumentType.mot
               ? DateReminderSchedule.mot
               : null),
       isArchived: false,
@@ -227,7 +241,11 @@ class DocumentService {
     final issue = _dateOnlyOrNull(draft.issueDate);
     final expiry = _dateOnlyOrNull(draft.expiryDate);
     if (issue != null && expiry != null && expiry.isBefore(issue)) {
-      errors.add('Expiry date cannot be before issue date.');
+      errors.add(
+        DocumentType.classify(category) == DocumentType.tax
+            ? 'Due date cannot be before issue date.'
+            : 'Expiry date cannot be before issue date.',
+      );
     }
     if (errors.isNotEmpty) {
       throw ValidationException(errors);
@@ -244,6 +262,22 @@ class DocumentService {
       notes: draft.notes,
       reminderSchedule: draft.reminderSchedule,
     );
+  }
+
+  Future<void> _checkMot(
+    VehicleDocumentDraft draft, {
+    String? excludingId,
+    DateReminderSchedule? fallbackSchedule,
+  }) async {
+    if (DocumentType.classify(draft.category) == DocumentType.mot &&
+        draft.expiryDate != null &&
+        hasDateNotifications(draft.reminderSchedule ?? fallbackSchedule)) {
+      await ensureNoOtherMotReminder(
+        database,
+        draft.vehicleId,
+        excludingDocumentId: excludingId,
+      );
+    }
   }
 
   String? _cleanOptional(String? value) {

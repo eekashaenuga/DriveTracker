@@ -66,7 +66,9 @@ class DateReminderEditor extends StatelessWidget {
                     ? DateReminderSchedule.mot
                     : DateReminderSchedule.standard,
               ),
-              child: Text(showMotPreset ? 'MOT preset' : '30-day preset'),
+              child: Text(
+                showMotPreset ? 'Use recommended MOT timings' : '30-day preset',
+              ),
             ),
             if (value.dailyFromDays == null)
               TextButton(

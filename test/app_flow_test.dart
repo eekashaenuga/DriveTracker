@@ -1358,7 +1358,7 @@ void main() {
         matching: find.textContaining('8,000 mi remaining'),
       ),
     );
-    expect(find.text('All good'), findsWidgets);
+    expect(find.text('Upcoming'), findsWidgets);
 
     final reminders = await tester.runAsync(
       () => services.maintenanceItemService.remindersForVehicle(
@@ -1556,7 +1556,7 @@ void main() {
     final card = find.byKey(Key('documentCard_${document.id}'));
     await _pumpUntilFound(tester, card);
     expect(find.text('Insurance policy'), findsWidgets);
-    expect(find.textContaining('Expires in 5 days'), findsWidgets);
+    expect(find.textContaining('Expiring soon'), findsWidgets);
 
     await _tapAndPump(tester, card);
     await _pumpUntilFound(
@@ -1624,6 +1624,7 @@ void main() {
       tester,
       find.byKey(Key('documentReminder_${document.id}')),
     );
+    await _pumpUntilFound(tester, find.text('No active reminders'));
     expect(tester.takeException(), isNull);
   });
 
