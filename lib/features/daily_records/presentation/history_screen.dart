@@ -91,6 +91,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
             ),
             const SizedBox(height: DTSpacing.lg),
+            if (_filter.isInsightsScope)
+              const Text(
+                'From Insights: record types and vehicle scope are retained. Reset clears this scope.',
+              ),
             _HistoryFilters(
               filter: _filter,
               vehicles: vehicles,
@@ -252,7 +256,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _scopeLabel(List<Vehicle> vehicles) {
     final vehicleId = _filter.vehicleId;
     if (vehicleId == null) {
-      return 'All vehicles';
+      return _filter.vehicleIds == null
+          ? 'All vehicles'
+          : 'Insights vehicle scope';
     }
     for (final vehicle in vehicles) {
       if (vehicle.id == vehicleId) {

@@ -780,14 +780,14 @@ void main() {
         tester,
         find.byKey(const Key('dataStorageBackupButton')),
       );
-      await _pumpUntil(tester, () => bridge.savedFiles.length == 1);
+      await _pumpUntilAsync(tester, () async => bridge.savedFiles.length == 1);
       await tester.drag(find.byType(ListView), const Offset(0, -260));
       await tester.pump();
       await _tapAndRunAsync(
         tester,
         find.byKey(const Key('dataStorageExportCsvButton')),
       );
-      await _pumpUntil(tester, () => bridge.savedFiles.length == 2);
+      await _pumpUntilAsync(tester, () async => bridge.savedFiles.length == 2);
 
       expect(bridge.savedFiles.map((file) => file.suggestedName), [
         startsWith('drivetracker-backup-'),

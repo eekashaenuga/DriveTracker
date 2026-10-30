@@ -101,7 +101,28 @@ class InsightsRepository {
               (vehicle.purchaseDate != null &&
                   resolvedRange.contains(vehicle.purchaseDate!))),
     );
+    final costEvents = <DateTime>[
+      ...refuels.map((r) => r.eventDateTime),
+      ...expenses.map((r) => r.eventDateTime),
+      ...services.map((r) => r.eventDateTime),
+    ];
+    final coverageStart = distance.start;
+    final coverageEnd = distance.end;
+    final aligned =
+        coverageStart != null &&
+        coverageEnd != null &&
+        (resolvedRange.isBounded
+            ? coverageStart.isAtSameMomentAs(resolvedRange.startInclusive!) &&
+                  coverageEnd.isAtSameMomentAs(resolvedRange.endExclusive!)
+            : costEvents.every(
+                (date) =>
+                    !date.isBefore(coverageStart) && !date.isAfter(coverageEnd),
+              ));
     return VehicleInsights(
+      vehicleIds: vehicleIds,
+      costDistanceAligned: aligned,
+      fuelVolumeMillilitres: _sum(refuels.map((r) => r.volumeMillilitres)),
+      refuelCount: refuels.length,
       acquisitionCostMinor: _sum(
         acquisitions.map((v) => v.acquisitionCostMinor!),
       ),
@@ -136,7 +157,7 @@ class InsightsRepository {
         allRefuelsForEconomy,
         resolvedRange,
       ),
-      fuelPriceTrend: _fuelPriceTrend(buckets, refuels),
+      fuelPriceTrend: _fuelPriceTrend(refuels),
       odometerTrend: _odometerTrend(scope, odometers, resolvedRange),
     );
   }
@@ -342,7 +363,12 @@ class InsightsRepository {
         'Odometer readings cannot produce a valid distance.',
       );
     }
-    return DistanceInsight.available(distance, unit);
+    return DistanceInsight.available(
+      distance,
+      unit,
+      start: start.eventDateTime,
+      end: end.eventDateTime,
+    );
   }
 
   List<OdometerEntry> _chronologicalValidOdometers(
@@ -398,7 +424,7 @@ class InsightsRepository {
       return valid.last;
     }
     for (final entry in valid.reversed) {
-      if (entry.eventDateTime.toLocal().isBefore(end)) {
+      if (!entry.eventDateTime.toLocal().isAfter(end)) {
         return entry;
       }
     }
@@ -416,20 +442,23 @@ class InsightsRepository {
       );
     }
     final unit = scope.distanceUnit;
-    if (unit != DistanceUnit.miles) {
-      return const FuelEconomyInsight.unavailable(
-        'UK MPG needs mile-based odometer readings.',
-      );
+    if (unit == null) {
+      return const FuelEconomyInsight.unavailable('Distance unit unavailable.');
     }
-    final intervals = FuelEconomyCalculator.validIntervals(
-      refuels: refuels,
-      distanceUnit: DistanceUnit.miles,
-    ).where((interval) => range.contains(interval.endRefuel.eventDateTime));
+    final intervals =
+        FuelEconomyCalculator.validIntervals(
+              refuels: refuels,
+              distanceUnit: unit,
+            )
+            .where(
+              (interval) => range.contains(interval.endRefuel.eventDateTime),
+            )
+            .toList();
     final distance = _sum(intervals.map((interval) => interval.distance));
     final volume = _sum(
       intervals.map((interval) => interval.volumeMillilitres),
     );
-    final ukMpg = _ukMpg(distance: distance, volumeMillilitres: volume);
+    final ukMpg = FuelEconomyCalculator.aggregateUkMpg(intervals, unit);
     if (ukMpg == null) {
       return const FuelEconomyInsight.unavailable(
         'Add valid full-to-full refuels to calculate MPG.',
@@ -437,6 +466,9 @@ class InsightsRepository {
     }
     return FuelEconomyInsight.available(
       ukMpg: ukMpg,
+      start: intervals.first.startRefuel.eventDateTime,
+      end: intervals.last.endRefuel.eventDateTime,
+      intervalCount: intervals.length,
       distance: distance,
       volumeMillilitres: volume,
     );
@@ -455,41 +487,45 @@ class InsightsRepository {
       earliestEvent: earliestEvent,
       latestEvent: latestEvent,
     );
+    final totals = List.generate(buckets.length, (_) => List<int>.filled(4, 0));
+    void add(DateTime date, int amount, int component) {
+      var low = 0, high = buckets.length - 1;
+      while (low <= high) {
+        final mid = (low + high) ~/ 2;
+        if (date.isBefore(buckets[mid].startInclusive)) {
+          high = mid - 1;
+        } else if (!date.isBefore(buckets[mid].endExclusive)) {
+          low = mid + 1;
+        } else {
+          totals[mid][component] += amount;
+          return;
+        }
+      }
+    }
+
+    for (final r in refuels) {
+      add(r.eventDateTime, r.totalCostMinor, 0);
+    }
+    for (final r in services) {
+      add(r.eventDateTime, r.totalCostMinor, 1);
+    }
+    for (final r in expenses) {
+      add(r.eventDateTime, r.amountMinor, 2);
+    }
+    for (final r in income) {
+      add(r.eventDateTime, r.amountMinor, 3);
+    }
     return [
-      for (var index = 0; index < buckets.length; index += 1)
+      for (var i = 0; i < buckets.length; i++)
         InsightAmountBucket(
-          index: index,
-          startInclusive: buckets[index].startInclusive,
-          endExclusive: buckets[index].endExclusive,
-          label: buckets[index].label,
-          fuelSpendMinor: _sum(
-            refuels
-                .where(
-                  (record) => buckets[index].contains(record.eventDateTime),
-                )
-                .map((record) => record.totalCostMinor),
-          ),
-          serviceSpendMinor: _sum(
-            services
-                .where(
-                  (record) => buckets[index].contains(record.eventDateTime),
-                )
-                .map((record) => record.totalCostMinor),
-          ),
-          expenseSpendMinor: _sum(
-            expenses
-                .where(
-                  (record) => buckets[index].contains(record.eventDateTime),
-                )
-                .map((record) => record.amountMinor),
-          ),
-          incomeMinor: _sum(
-            income
-                .where(
-                  (record) => buckets[index].contains(record.eventDateTime),
-                )
-                .map((record) => record.amountMinor),
-          ),
+          index: i,
+          startInclusive: buckets[i].startInclusive,
+          endExclusive: buckets[i].endExclusive,
+          label: buckets[i].label,
+          fuelSpendMinor: totals[i][0],
+          serviceSpendMinor: totals[i][1],
+          expenseSpendMinor: totals[i][2],
+          incomeMinor: totals[i][3],
         ),
     ];
   }
@@ -549,12 +585,12 @@ class InsightsRepository {
     List<Refuel> refuels,
     ResolvedAnalyticsRange range,
   ) {
-    if (scope.distanceUnit != DistanceUnit.miles || scope.isAllVehicles) {
+    if (scope.distanceUnit == null || scope.isAllVehicles) {
       return const [];
     }
     final intervals = FuelEconomyCalculator.validIntervals(
       refuels: refuels,
-      distanceUnit: DistanceUnit.miles,
+      distanceUnit: scope.distanceUnit!,
     ).where((interval) => range.contains(interval.endRefuel.eventDateTime));
     return [
       for (final interval in intervals)
@@ -568,30 +604,15 @@ class InsightsRepository {
     ];
   }
 
-  List<FuelPricePoint> _fuelPriceTrend(
-    List<InsightAmountBucket> buckets,
-    List<_RefuelRecord> refuels,
-  ) {
-    final points = <FuelPricePoint>[];
-    for (final bucket in buckets) {
-      final bucketRefuels = refuels.where(
-        (record) =>
-            !record.eventDateTime.toLocal().isBefore(bucket.startInclusive) &&
-            record.eventDateTime.toLocal().isBefore(bucket.endExclusive),
-      );
-      final weighted = _weightedFuelPrice(bucketRefuels);
-      if (weighted != null) {
-        points.add(
-          FuelPricePoint(
-            date: bucket.startInclusive,
-            label: bucket.label,
-            microsPerLitre: weighted,
-          ),
-        );
-      }
-    }
-    return points;
-  }
+  List<FuelPricePoint> _fuelPriceTrend(List<_RefuelRecord> refuels) => [
+    for (final r in refuels)
+      if (_weightedFuelPrice([r]) case final int price)
+        FuelPricePoint(
+          date: r.eventDateTime,
+          label: _dateLabel(r.eventDateTime),
+          microsPerLitre: price,
+        ),
+  ];
 
   List<OdometerTrendPoint> _odometerTrend(
     InsightScope scope,
@@ -628,18 +649,6 @@ class InsightsRepository {
             FuelNumbers.millilitresPerLitre /
             totalVolume)
         .round();
-  }
-
-  double? _ukMpg({required int distance, required int volumeMillilitres}) {
-    if (distance <= 0 || volumeMillilitres <= 0) {
-      return null;
-    }
-    final litres = volumeMillilitres / FuelNumbers.millilitresPerLitre;
-    final gallons = litres * FuelNumbers.imperialGallonsPerLitre;
-    if (gallons <= 0) {
-      return null;
-    }
-    return distance / gallons;
   }
 
   bool _isRunningExpenseCategory(String categoryId) {

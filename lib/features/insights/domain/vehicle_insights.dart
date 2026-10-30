@@ -7,6 +7,10 @@ import '../../vehicles/domain/vehicle.dart';
 class VehicleInsights {
   const VehicleInsights({
     this.incomeActivities = const [],
+    this.costDistanceAligned = true,
+    this.fuelVolumeMillilitres = 0,
+    this.refuelCount = 0,
+    this.vehicleIds = const [],
     this.acquisitionCostMinor = 0,
     this.acquisitionCount = 0,
     this.undatedAcquisitionCount = 0,
@@ -28,6 +32,12 @@ class VehicleInsights {
   });
 
   final List<IncomeEarnings> incomeActivities;
+  final bool costDistanceAligned;
+  final int fuelVolumeMillilitres, refuelCount;
+  final List<String> vehicleIds;
+  String? get costDistanceReason => costDistanceAligned
+      ? null
+      : 'Not enough data: spending dates and observed odometer coverage do not match.';
   final int acquisitionCostMinor;
   final int acquisitionCount;
   final int undatedAcquisitionCount;
@@ -67,12 +77,12 @@ class VehicleInsights {
 
   double? get fuelCostMinorPerDistance => CostPerDistance.calculate(
     costMinor: fuelSpendMinor,
-    distance: distance.value ?? 0,
+    distance: costDistanceAligned ? distance.value ?? 0 : 0,
   );
 
   double? get runningCostMinorPerDistance {
     final value = distance.value;
-    if (value == null || value <= 0) {
+    if (!costDistanceAligned || value == null || value <= 0) {
       return null;
     }
     return CostPerDistance.calculate(
@@ -83,7 +93,7 @@ class VehicleInsights {
 
   double? get totalCostMinorPerDistance {
     final value = distance.value;
-    if (value == null || value <= 0) {
+    if (!costDistanceAligned || value == null || value <= 0) {
       return null;
     }
     return CostPerDistance.calculate(
@@ -113,13 +123,16 @@ class InsightScope {
 }
 
 class DistanceInsight {
-  const DistanceInsight.available(this.value, this.unit)
+  const DistanceInsight.available(this.value, this.unit, {this.start, this.end})
     : unavailableReason = null;
 
   const DistanceInsight.unavailable(this.unavailableReason)
     : value = null,
-      unit = null;
+      unit = null,
+      start = null,
+      end = null;
 
+  final DateTime? start, end;
   final int? value;
   final DistanceUnit? unit;
   final String? unavailableReason;
@@ -132,13 +145,21 @@ class FuelEconomyInsight {
     required this.ukMpg,
     required this.distance,
     required this.volumeMillilitres,
+    this.start,
+    this.end,
+    this.intervalCount = 0,
   }) : unavailableReason = null;
 
   const FuelEconomyInsight.unavailable(this.unavailableReason)
     : ukMpg = null,
+      start = null,
+      end = null,
+      intervalCount = 0,
       distance = 0,
       volumeMillilitres = 0;
 
+  final DateTime? start, end;
+  final int intervalCount;
   final double? ukMpg;
   final int distance;
   final int volumeMillilitres;

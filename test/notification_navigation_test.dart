@@ -181,6 +181,7 @@ void main() {
         );
         await t.pageBack();
         await waitM3(t, find.byType(RemindersScreen));
+        await waitM3(t, find.byKey(Key('documentReminder_${doc.id}')));
         expect(find.text('Vehicle A'), findsWidgets);
         expect(c.selectedVehicle!.name, 'Vehicle B');
         expect(t.takeException(), isNull);

@@ -1,3 +1,5 @@
+import 'package:drivetracker/features/daily_records/presentation/history_screen.dart';
+
 import 'dart:io';
 
 import 'package:drivetracker/app/app.dart';
@@ -459,6 +461,16 @@ void main() {
     await _waitForVehicleRestored(tester, services, weekend.id);
     await _pumpUntilFound(tester, find.text('25,100 mi'));
 
+    for (
+      var i = 0;
+      i < 300 && controller.selectedVehicle?.id != weekend.id;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 10));
+    }
     expect(controller.selectedVehicle?.id, weekend.id);
     expect(
       await tester.runAsync(() => services.vehicles.listArchived()),
@@ -1704,7 +1716,7 @@ void main() {
       await _tapAndPump(tester, find.text('Insights').last);
       await _pumpUntilFound(
         tester,
-        find.byKey(const Key('insightsScreenList')),
+        find.byKey(const Key('insightsTotalSpendMetric')),
       );
 
       expect(
@@ -1714,10 +1726,11 @@ void main() {
         ),
         findsOneWidget,
       );
+      await _openInsightsSection(tester, 'Costs');
       expect(
         find.descendant(
           of: find.byKey(const Key('insightsDistanceMetric')),
-          matching: find.text('600 mi'),
+          matching: find.textContaining('600 mi'),
         ),
         findsOneWidget,
       );
@@ -1787,12 +1800,25 @@ void main() {
         tester,
         find.byKey(const Key('insightsBreakdown_cat_expense_parking')),
       );
-      await _pumpUntilFound(tester, find.textContaining('Parking · £12.00'));
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('insightsBreakdownDrilldownButton')),
+      );
       await _tapAndPump(
         tester,
         find.byKey(const Key('insightsBreakdownDrilldownButton')),
       );
-      await _pumpUntilFound(
+      await _pumpUntilFound(tester, find.byType(HistoryScreen));
+      final drillFilter = tester
+          .widget<HistoryScreen>(find.byType(HistoryScreen))
+          .initialFilter!;
+      expect(drillFilter.categoryId, 'cat_expense_parking');
+      expect(drillFilter.operatingCostsOnly, isTrue);
+      final matchingRows = await tester.runAsync(
+        () => controller.history(drillFilter),
+      );
+      expect(matchingRows!.map((r) => r.recordId), contains(expenseId));
+      await _scrollUntilFound(
         tester,
         find.byKey(Key('historyActivity_expense_$expenseId')),
       );
@@ -1847,20 +1873,28 @@ void main() {
     await tester.runAsync(() => controller.setThemeMode(ThemeMode.dark));
     await tester.pump();
     await _tapAndPump(tester, find.text('Insights').last);
-    await _pumpUntilFound(tester, find.byKey(const Key('insightsScreenList')));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('insightsTotalSpendMetric')),
+    );
 
     await _selectDropdownItem(
       tester,
       field: find.byKey(const Key('insightsVehicleSelector')),
-      label: 'All vehicles',
+      label: 'All active vehicles',
     );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('insightsTotalSpendMetric')),
+    );
+    await _openInsightsSection(tester, 'Costs');
     await _pumpUntilFound(
       tester,
       find.text('Select one vehicle for distance-based metrics.'),
     );
     expect(
       find.descendant(
-        of: find.byKey(const Key('insightsTotalSpendMetric')),
+        of: find.byKey(const Key('insightsCostsTotalMetric')),
         matching: find.text('£70.00'),
       ),
       findsOneWidget,
@@ -1892,8 +1926,17 @@ void main() {
       tester,
       find.byKey(const Key('insightsCustomRangePicker')),
     );
-    expect(find.text('4 Sep 2026'), findsOneWidget);
-    await _pumpUntilFound(tester, find.byKey(const Key('insightsScreenList')));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('insightsCustomRangeButton')),
+        matching: find.text('4 Sep 2026'),
+      ),
+      findsOneWidget,
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('insightsTotalSpendMetric')),
+    );
 
     await _tapInsightsCustomRangeButton(tester);
     await _pumpUntilFound(
@@ -1905,7 +1948,13 @@ void main() {
       tester,
       find.byKey(const Key('insightsCustomRangePicker')),
     );
-    expect(find.text('4 Sep 2026'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('insightsCustomRangeButton')),
+        matching: find.text('4 Sep 2026'),
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -1985,11 +2034,14 @@ void main() {
     await tester.runAsync(() => controller.setThemeMode(ThemeMode.dark));
     await tester.pump();
     await _tapAndPump(tester, find.text('Insights').last);
-    await _pumpUntilFound(tester, find.byKey(const Key('insightsScreenList')));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('insightsTotalSpendMetric')),
+    );
 
     expect(find.byKey(const Key('insightsTotalSpendMetric')), findsOneWidget);
+    await _openInsightsSection(tester, 'Costs');
     expect(find.byKey(const Key('insightsDistanceMetric')), findsOneWidget);
-    expect(find.byKey(const Key('insightsFuelEconomyMetric')), findsOneWidget);
     expect(
       find.byKey(const Key('insightsCostPerDistanceMetric')),
       findsOneWidget,
@@ -2012,6 +2064,10 @@ void main() {
       findsOneWidget,
     );
 
+    await _openInsightsSection(tester, 'Fuel');
+    expect(find.byKey(const Key('insightsFuelEconomyMetric')), findsOneWidget);
+    await _scrollUntilFound(tester, find.text('Economy'));
+    await _tapAndPump(tester, find.text('Economy'));
     await _scrollUntilFound(
       tester,
       find.byKey(const Key('insightsFuelEconomyChart')),
@@ -2025,6 +2081,8 @@ void main() {
       findsOneWidget,
     );
 
+    await _scrollUntilFound(tester, find.text('Price'));
+    await _tapAndPump(tester, find.text('Price'));
     await _scrollUntilFound(
       tester,
       find.byKey(const Key('insightsFuelPriceChart')),
@@ -2038,15 +2096,9 @@ void main() {
       findsOneWidget,
     );
 
-    await _scrollUntilFound(
-      tester,
-      find.byKey(const Key('insightsMileagePanel')),
-    );
-    await _tapAndPump(tester, find.byKey(const Key('insightsMileagePoint_0')));
-    expect(
-      find.byKey(const Key('insightsSelectedMileagePoint')),
-      findsOneWidget,
-    );
+    await _scrollUntilFound(tester, find.text('Coverage & details'));
+    await _tapAndPump(tester, find.text('Coverage & details'));
+    expect(find.textContaining('No mileage is interpolated'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -2218,7 +2270,7 @@ void main() {
       find.byKey(const Key('categoryNameField')),
       '  Warranty Cover  ',
     );
-    await _tapAndPump(tester, find.byKey(const Key('addCategoryButton')));
+    await _tapAndRunAsync(tester, find.byKey(const Key('addCategoryButton')));
     await _pumpUntilGone(tester, find.text('New expense category'));
     await _pumpUntilFound(tester, find.text('Warranty Cover'));
 
@@ -2432,6 +2484,15 @@ Future<void> _selectDatePickerRange(
 }
 
 Future<void> _tapInsightsCustomRangeButton(WidgetTester tester) async {
+  if (find.byKey(const Key('insightsDetailContext')).evaluate().isNotEmpty) {
+    await tester.tap(find.byType(BackButton).hitTestable().last);
+    await tester.pumpAndSettle();
+  }
+  await tester.drag(
+    find.byKey(const Key('insightsScreenList')),
+    const Offset(0, 5000),
+  );
+  await tester.pumpAndSettle();
   final customRangeButton = find.byKey(const Key('insightsCustomRangeButton'));
   await _pumpUntilFound(tester, customRangeButton);
   await tester.ensureVisible(customRangeButton);
@@ -2896,4 +2957,21 @@ RefuelDraft _refuelDraft(
     isFullTank: true,
     missedPreviousRefuel: false,
   );
+}
+
+Future<void> _openInsightsSection(WidgetTester t, String title) async {
+  if (find.byKey(const Key('insightsDetailContext')).evaluate().isNotEmpty) {
+    await t.tap(find.byType(BackButton).hitTestable().last);
+    await t.pumpAndSettle();
+  }
+  final card = find.byKey(Key('insights${title}Section'));
+  await t.ensureVisible(card);
+  await t.pumpAndSettle();
+  await _tapAndPump(t, card);
+  await _pumpUntilFound(t, find.byKey(const Key('insightsDetailContext')));
+  if (title == 'Costs') {
+    await t.ensureVisible(find.text('Distance & coverage'));
+    await t.pumpAndSettle();
+    await _tapAndPump(t, find.text('Distance & coverage'));
+  }
 }

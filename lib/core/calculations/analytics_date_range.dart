@@ -1,6 +1,8 @@
 enum AnalyticsRangePreset {
   week('Week'),
   month('Month'),
+  lastMonth('Last month'),
+  lastThreeMonths('Last 3 months'),
   year('Year'),
   all('All'),
   custom('Custom');
@@ -43,14 +45,30 @@ class AnalyticsDateRange {
     return switch (preset) {
       AnalyticsRangePreset.week => ResolvedAnalyticsRange(
         preset: preset,
-        startInclusive: today.subtract(Duration(days: today.weekday - 1)),
-        endExclusive: today
-            .subtract(Duration(days: today.weekday - 1))
-            .add(const Duration(days: 7)),
+        startInclusive: DateTime(
+          today.year,
+          today.month,
+          today.day - today.weekday + 1,
+        ),
+        endExclusive: DateTime(
+          today.year,
+          today.month,
+          today.day - today.weekday + 8,
+        ),
       ),
       AnalyticsRangePreset.month => ResolvedAnalyticsRange(
         preset: preset,
         startInclusive: DateTime(localNow.year, localNow.month),
+        endExclusive: DateTime(localNow.year, localNow.month + 1),
+      ),
+      AnalyticsRangePreset.lastMonth => ResolvedAnalyticsRange(
+        preset: preset,
+        startInclusive: DateTime(localNow.year, localNow.month - 1),
+        endExclusive: DateTime(localNow.year, localNow.month),
+      ),
+      AnalyticsRangePreset.lastThreeMonths => ResolvedAnalyticsRange(
+        preset: preset,
+        startInclusive: DateTime(localNow.year, localNow.month - 2),
         endExclusive: DateTime(localNow.year, localNow.month + 1),
       ),
       AnalyticsRangePreset.year => ResolvedAnalyticsRange(
@@ -64,7 +82,13 @@ class AnalyticsDateRange {
       AnalyticsRangePreset.custom => ResolvedAnalyticsRange(
         preset: preset,
         startInclusive: customStart,
-        endExclusive: customEndInclusive?.add(const Duration(days: 1)),
+        endExclusive: customEndInclusive == null
+            ? null
+            : DateTime(
+                customEndInclusive!.year,
+                customEndInclusive!.month,
+                customEndInclusive!.day + 1,
+              ),
       ),
     };
   }
@@ -119,7 +143,7 @@ class ResolvedAnalyticsRange {
     if (end == null) {
       return null;
     }
-    return end.subtract(const Duration(days: 1));
+    return DateTime(end.year, end.month, end.day - 1);
   }
 
   List<AnalyticsTimeBucket> buckets({
@@ -171,7 +195,11 @@ class ResolvedAnalyticsRange {
       return null;
     }
     final earliest = _localDay(earliestEvent);
-    final latest = _localDay(latestEvent).add(const Duration(days: 1));
+    final latest = DateTime(
+      latestEvent.toLocal().year,
+      latestEvent.toLocal().month,
+      latestEvent.toLocal().day + 1,
+    );
     if (!earliest.isBefore(latest)) {
       return null;
     }
@@ -186,7 +214,9 @@ class ResolvedAnalyticsRange {
     final days = end.difference(start).inDays;
     var size = switch (preset) {
       AnalyticsRangePreset.week => AnalyticsBucketSize.day,
-      AnalyticsRangePreset.month => AnalyticsBucketSize.week,
+      AnalyticsRangePreset.month ||
+      AnalyticsRangePreset.lastMonth => AnalyticsBucketSize.week,
+      AnalyticsRangePreset.lastThreeMonths => AnalyticsBucketSize.month,
       AnalyticsRangePreset.year => AnalyticsBucketSize.month,
       AnalyticsRangePreset.all =>
         days <= 370 ? AnalyticsBucketSize.month : AnalyticsBucketSize.year,
@@ -240,8 +270,8 @@ class ResolvedAnalyticsRange {
       AnalyticsBucketSize.week => DateTime(
         value.year,
         value.month,
-        value.day,
-      ).subtract(Duration(days: value.weekday - 1)),
+        value.day - value.weekday + 1,
+      ),
       AnalyticsBucketSize.month => DateTime(value.year, value.month),
       AnalyticsBucketSize.year => DateTime(value.year),
     };
@@ -249,8 +279,16 @@ class ResolvedAnalyticsRange {
 
   static DateTime _nextBucket(DateTime value, AnalyticsBucketSize size) {
     return switch (size) {
-      AnalyticsBucketSize.day => value.add(const Duration(days: 1)),
-      AnalyticsBucketSize.week => value.add(const Duration(days: 7)),
+      AnalyticsBucketSize.day => DateTime(
+        value.year,
+        value.month,
+        value.day + 1,
+      ),
+      AnalyticsBucketSize.week => DateTime(
+        value.year,
+        value.month,
+        value.day + 7,
+      ),
       AnalyticsBucketSize.month => DateTime(value.year, value.month + 1),
       AnalyticsBucketSize.year => DateTime(value.year + 1),
     };
@@ -264,7 +302,7 @@ class ResolvedAnalyticsRange {
     return switch (size) {
       AnalyticsBucketSize.day => '${start.day} ${_monthShort(start.month)}',
       AnalyticsBucketSize.week =>
-        '${start.day} ${_monthShort(start.month)}-${end.subtract(const Duration(days: 1)).day} ${_monthShort(end.subtract(const Duration(days: 1)).month)}',
+        '${start.day} ${_monthShort(start.month)}-${DateTime(end.year, end.month, end.day - 1).day} ${_monthShort(DateTime(end.year, end.month, end.day - 1).month)}',
       AnalyticsBucketSize.month => '${_monthShort(start.month)} ${start.year}',
       AnalyticsBucketSize.year => start.year.toString(),
     };

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/dt_tokens.dart';
+import 'insight_formatters.dart';
 
 class DTInsightCard extends StatelessWidget {
   const DTInsightCard({
@@ -19,27 +20,12 @@ class DTInsightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: emphasized
-            ? colors.primaryContainer.withValues(alpha: 0.32)
-            : colors.surfaceContainerHighest.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: colors.outlineVariant.withValues(
-            alpha: emphasized ? 0.28 : 0.2,
-          ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: colors.shadow.withValues(alpha: 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: child,
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      color: emphasized ? colors.primaryContainer : colors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(padding: padding, child: child),
     );
   }
 }
@@ -54,8 +40,10 @@ class DTInsightBarDatum {
     required this.color,
     required this.selected,
     required this.onTap,
+    this.components = const [],
   });
 
+  final List<({int value, Color color})> components;
   final int index;
   final String label;
   final int value;
@@ -85,29 +73,78 @@ class DTInsightBarChart extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final chartWidth = math.max(constraints.maxWidth, bars.length * 54.0);
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: chartWidth,
-            height: height,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (final bar in bars)
-                  Expanded(
-                    child: _SelectableBar(
-                      datum: bar,
-                      maxValue: maxValue,
-                      baselineColor: colors.outlineVariant.withValues(
-                        alpha: 0.42,
+        final slot = constraints.maxWidth / math.max(1, bars.length);
+        final compressed =
+            slot < MediaQuery.textScalerOf(context).scale(24) + 4;
+        String shortLabel(String label) {
+          final bits = label.split(' ');
+          if (bits.length == 2 && RegExp(r'^\d{4}$').hasMatch(bits.last)) {
+            return bits.first;
+          }
+          return label.split('-').first;
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              key: Key('${barKeyPrefix}Viewport'),
+              width: constraints.maxWidth,
+              height: math.max(
+                height,
+                96 + MediaQuery.textScalerOf(context).scale(40),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (final bar in bars)
+                    Expanded(
+                      child: _SelectableBar(
+                        datum: bar,
+                        maxValue: maxValue,
+                        baselineColor: colors.outlineVariant.withValues(
+                          alpha: 0.42,
+                        ),
+                        barKeyPrefix: barKeyPrefix,
+                        interactive: slot >= 48,
+                        showLabel: !compressed,
+                        axisLabel: shortLabel(bar.label),
                       ),
-                      barKeyPrefix: barKeyPrefix,
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
+            if (compressed && bars.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        bars.first.label,
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ),
+                    if (bars.length > 2)
+                      Expanded(
+                        child: Text(
+                          bars[bars.length ~/ 2].label,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                    Expanded(
+                      child: Text(
+                        bars.last.label,
+                        textAlign: TextAlign.right,
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         );
       },
     );
@@ -120,8 +157,13 @@ class _SelectableBar extends StatelessWidget {
     required this.maxValue,
     required this.baselineColor,
     required this.barKeyPrefix,
+    required this.interactive,
+    required this.showLabel,
+    required this.axisLabel,
   });
 
+  final bool interactive, showLabel;
+  final String axisLabel;
   final DTInsightBarDatum datum;
   final int maxValue;
   final Color baselineColor;
@@ -136,15 +178,15 @@ class _SelectableBar extends StatelessWidget {
     final barHeight = datum.value <= 0 ? 0.0 : math.max(6.0, ratio * 96.0);
     final barColor = datum.selected ? colors.primary : datum.color;
     return Semantics(
-      button: true,
+      button: interactive,
       selected: datum.selected,
       label: datum.semanticsLabel,
       child: InkWell(
         key: Key('${barKeyPrefix}_${datum.index}'),
         borderRadius: BorderRadius.circular(DTRadii.card),
-        onTap: datum.onTap,
+        onTap: interactive ? datum.onTap : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: DTSpacing.xs),
+          padding: const EdgeInsets.symmetric(horizontal: 2),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -155,32 +197,53 @@ class _SelectableBar extends StatelessWidget {
                     key: Key('${barKeyPrefix}Bar_${datum.index}'),
                     width: double.infinity,
                     height: barHeight,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: barColor,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(8),
-                        ),
-                      ),
-                    ),
+                    child: datum.components.isEmpty
+                        ? DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: barColor,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(8),
+                              ),
+                            ),
+                          )
+                        : ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(8),
+                            ),
+                            child: Column(
+                              children: [
+                                for (final component
+                                    in datum.components.reversed)
+                                  if (component.value > 0)
+                                    Expanded(
+                                      flex: component.value,
+                                      child: ColoredBox(
+                                        color: component.color,
+                                        child: const SizedBox.expand(),
+                                      ),
+                                    ),
+                              ],
+                            ),
+                          ),
                   ),
                 ),
               ),
               Container(height: 1, color: baselineColor),
               const SizedBox(height: DTSpacing.xs),
-              Text(
-                datum.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: datum.selected
-                      ? colors.primary
-                      : colors.onSurfaceVariant,
-                  fontWeight: datum.selected
-                      ? FontWeight.w900
-                      : FontWeight.w700,
+              if (showLabel)
+                Text(
+                  axisLabel,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: datum.selected
+                        ? colors.primary
+                        : colors.onSurfaceVariant,
+                    fontWeight: datum.selected
+                        ? FontWeight.w900
+                        : FontWeight.w700,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -196,8 +259,12 @@ class DTInsightLinePoint {
     required this.valueLabel,
     required this.detailLabel,
     required this.semanticsLabel,
+    this.date,
+    this.observationDetail,
   });
 
+  final DateTime? date;
+  final String? observationDetail;
   final String label;
   final double value;
   final String valueLabel;
@@ -254,6 +321,10 @@ class _DTInsightLineChartState extends State<DTInsightLineChart> {
 
     final colors = Theme.of(context).colorScheme;
     final selected = widget.points[_selectedIndex];
+    String dateLabel(DTInsightLinePoint p) =>
+        p.date == null ? p.label : InsightFormat.date(p.date, compact: true);
+    final minimum = widget.points.reduce((a, b) => a.value <= b.value ? a : b);
+    final maximum = widget.points.reduce((a, b) => a.value >= b.value ? a : b);
     final minValue = widget.points
         .map((point) => point.value)
         .reduce((a, b) => a < b ? a : b);
@@ -263,56 +334,57 @@ class _DTInsightLineChartState extends State<DTInsightLineChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text('Observed range: ${minimum.valueLabel} – ${maximum.valueLabel}'),
         LayoutBuilder(
           builder: (context, constraints) {
-            final chartWidth = math.max(
-              constraints.maxWidth,
-              math.max(1, widget.points.length) * 64.0,
-            );
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: chartWidth,
-                height: widget.height,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _LineChartPainter(
-                          points: widget.points,
-                          minValue: minValue,
-                          maxValue: maxValue,
-                          color: widget.color,
-                          surfaceColor: colors.surfaceContainerHighest,
-                          gridColor: colors.outlineVariant.withValues(
-                            alpha: 0.32,
-                          ),
-                          selectedIndex: _selectedIndex,
-                        ),
-                      ),
-                    ),
-                    for (
-                      var index = 0;
-                      index < widget.points.length;
-                      index += 1
-                    )
-                      _PointTapTarget(
-                        tapKey: Key('${widget.pointKeyPrefix}_$index'),
-                        index: index,
-                        count: widget.points.length,
-                        point: widget.points[index],
-                        chartWidth: chartWidth,
-                        chartHeight: widget.height,
+            final chartWidth = constraints.maxWidth;
+            return SizedBox(
+              width: chartWidth,
+              height: widget.height,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _LineChartPainter(
+                        points: widget.points,
                         minValue: minValue,
                         maxValue: maxValue,
-                        selected: index == _selectedIndex,
-                        onTap: () => setState(() => _selectedIndex = index),
+                        color: widget.color,
+                        surfaceColor: colors.surfaceContainerHighest,
+                        gridColor: colors.outlineVariant.withValues(
+                          alpha: 0.32,
+                        ),
+                        selectedIndex: _selectedIndex,
                       ),
-                  ],
-                ),
+                    ),
+                  ),
+                  for (var index = 0; index < widget.points.length; index += 1)
+                    _PointTapTarget(
+                      tapKey: Key('${widget.pointKeyPrefix}_$index'),
+                      index: index,
+                      count: widget.points.length,
+                      dateFraction: insightDateFraction(widget.points, index),
+                      interactive: widget.points.length * 48 <= chartWidth,
+                      point: widget.points[index],
+                      chartWidth: chartWidth,
+                      chartHeight: widget.height,
+                      minValue: minValue,
+                      maxValue: maxValue,
+                      selected: index == _selectedIndex,
+                      onTap: () => setState(() => _selectedIndex = index),
+                    ),
+                ],
               ),
             );
           },
+        ),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          spacing: 24,
+          children: [
+            Text(dateLabel(widget.points.first)),
+            Text(dateLabel(widget.points.last)),
+          ],
         ),
         const SizedBox(height: DTSpacing.sm),
         Container(
@@ -331,8 +403,6 @@ class _DTInsightLineChartState extends State<DTInsightLineChart> {
               Expanded(
                 child: Text(
                   selected.detailLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colors.onSurfaceVariant,
                     fontWeight: FontWeight.w700,
@@ -340,11 +410,13 @@ class _DTInsightLineChartState extends State<DTInsightLineChart> {
                 ),
               ),
               const SizedBox(width: DTSpacing.sm),
-              Text(
-                selected.valueLabel,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: widget.color,
-                  fontWeight: FontWeight.w900,
+              Flexible(
+                child: Text(
+                  selected.valueLabel,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: widget.color,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ],
@@ -361,6 +433,8 @@ class _PointTapTarget extends StatelessWidget {
     required this.index,
     required this.count,
     required this.point,
+    required this.dateFraction,
+    required this.interactive,
     required this.chartWidth,
     required this.chartHeight,
     required this.minValue,
@@ -372,6 +446,8 @@ class _PointTapTarget extends StatelessWidget {
   final Key tapKey;
   final int index;
   final int count;
+  final bool interactive;
+  final double dateFraction;
   final DTInsightLinePoint point;
   final double chartWidth;
   final double chartHeight;
@@ -385,6 +461,7 @@ class _PointTapTarget extends StatelessWidget {
     final offset = _pointOffset(
       index: index,
       count: count,
+      dateFraction: point.date == null ? null : dateFraction,
       value: point.value,
       chartWidth: chartWidth,
       chartHeight: chartHeight,
@@ -401,12 +478,12 @@ class _PointTapTarget extends StatelessWidget {
       child: SizedBox.expand(
         key: tapKey,
         child: Semantics(
-          button: true,
+          button: interactive,
           selected: selected,
           label: point.semanticsLabel,
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onTap: onTap,
+            onTap: interactive ? onTap : null,
           ),
         ),
       ),
@@ -448,6 +525,9 @@ class _LineChartPainter extends CustomPainter {
         _pointOffset(
           index: index,
           count: points.length,
+          dateFraction: points[index].date == null
+              ? null
+              : insightDateFraction(points, index),
           value: points[index].value,
           chartWidth: size.width,
           chartHeight: size.height,
@@ -455,22 +535,6 @@ class _LineChartPainter extends CustomPainter {
           maxValue: maxValue,
         ),
     ];
-
-    if (offsets.length > 1) {
-      final path = Path()..moveTo(offsets.first.dx, offsets.first.dy);
-      for (final offset in offsets.skip(1)) {
-        path.lineTo(offset.dx, offset.dy);
-      }
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = color
-          ..strokeWidth = 3
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-    }
 
     for (var index = 0; index < offsets.length; index += 1) {
       final selected = index == selectedIndex;
@@ -508,6 +572,7 @@ Offset _pointOffset({
   required int index,
   required int count,
   required double value,
+  double? dateFraction,
   required double chartWidth,
   required double chartHeight,
   required double minValue,
@@ -518,11 +583,24 @@ Offset _pointOffset({
   final usableWidth = math.max(0.0, chartWidth - horizontalPadding * 2);
   final usableHeight = math.max(0.0, chartHeight - verticalPadding * 2);
   final denominator = math.max(1, count - 1);
-  final x = horizontalPadding + usableWidth * index / denominator;
+  final x =
+      horizontalPadding + usableWidth * (dateFraction ?? index / denominator);
   final spread = maxValue - minValue;
   final ratio = spread <= 0
       ? 0.5
       : ((value - minValue) / spread).clamp(0.0, 1.0).toDouble();
   final y = verticalPadding + usableHeight * (1 - ratio);
   return Offset(x, y);
+}
+
+/// Chronologically ordered observations use elapsed dates, never equal-index spacing.
+/// Read the bounds in constant time so a chart does not repeatedly sort its history.
+double insightDateFraction(List<DTInsightLinePoint> points, int index) {
+  final first = points.firstOrNull?.date;
+  final last = points.lastOrNull?.date;
+  final at = points[index].date;
+  if (at == null || first == null || last == null || first == last) return 0.5;
+  return (at.difference(first).inMicroseconds /
+          last.difference(first).inMicroseconds)
+      .clamp(0.0, 1.0);
 }

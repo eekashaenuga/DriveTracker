@@ -230,6 +230,11 @@ void main() {
     final c = await controllerFor(t, s);
     await t.pumpWidget(app(c, const InsightsScreen()));
     await waitFor(t, find.byKey(const Key('insightsScreenList')));
+    await waitFor(t, find.byKey(const Key('insightsEarningsSection')));
+    await t.ensureVisible(find.byKey(const Key('insightsEarningsSection')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('insightsEarningsSection')));
+    await t.pumpAndSettle();
     final panel = find.byKey(const Key('incomeActivityEarningsPanel'));
     await t.scrollUntilVisible(
       panel,

@@ -32,25 +32,28 @@ class ActivityRepository {
     DateTime? now,
     sqflite.DatabaseExecutor? executor,
   }) async {
+    // Analytics drill-through must not silently truncate a total to the ordinary
+    // History preview limit. Only the explicitly constrained scope is loaded.
+    if (filter.isInsightsScope) limit = 2147483647;
     final db = await _executor(executor);
     final range = filter.range.resolve(now ?? DateTime.now());
     final activities = <DailyActivity>[];
 
-    if (_includes(filter.type, DailyActivityType.refuel) &&
+    if (_includes(filter, DailyActivityType.refuel) &&
         filter.categoryId == null) {
       activities.addAll(await _refuels(db, filter, range, limit));
     }
-    if (_includes(filter.type, DailyActivityType.expense)) {
+    if (_includes(filter, DailyActivityType.expense)) {
       activities.addAll(await _expenses(db, filter, range, limit));
     }
-    if (_includes(filter.type, DailyActivityType.income)) {
+    if (_includes(filter, DailyActivityType.income)) {
       activities.addAll(await _income(db, filter, range, limit));
     }
-    if (_includes(filter.type, DailyActivityType.service) &&
+    if (_includes(filter, DailyActivityType.service) &&
         filter.categoryId == null) {
       activities.addAll(await _services(db, filter, range, limit));
     }
-    if (_includes(filter.type, DailyActivityType.odometer) &&
+    if (_includes(filter, DailyActivityType.odometer) &&
         filter.categoryId == null) {
       activities.addAll(await _manualOdometers(db, filter, range, limit));
     }
@@ -390,6 +393,29 @@ class ActivityRepository {
     final conditions = <String>[];
     final args = <Object?>[];
 
+    if (filter.vehicleIds != null) {
+      if (filter.vehicleIds!.isEmpty) {
+        conditions.add('1 = 0');
+      } else {
+        conditions.add(
+          '$alias.vehicle_id IN (${List.filled(filter.vehicleIds!.length, '?').join(',')})',
+        );
+        args.addAll(filter.vehicleIds!);
+      }
+    }
+    if (alias == 's' && filter.operatingCostsOnly) {
+      conditions.add('s.is_baseline = 0');
+    }
+    if (alias == 'i' && filter.activityTypes != null) {
+      if (filter.activityTypes!.isEmpty) {
+        conditions.add('1 = 0');
+      } else {
+        conditions.add(
+          'i.activity_type IN (${List.filled(filter.activityTypes!.length, '?').join(',')})',
+        );
+        args.addAll(filter.activityTypes!.map((t) => t.name));
+      }
+    }
     final vehicleId = filter.vehicleId;
     if (vehicleId != null) {
       conditions.add('$alias.vehicle_id = ?');
@@ -436,8 +462,10 @@ class ActivityRepository {
     return _ActivityQuery(whereClause: whereClause, args: args);
   }
 
-  bool _includes(DailyActivityType selected, DailyActivityType candidate) {
-    return selected == DailyActivityType.all || selected == candidate;
+  bool _includes(HistoryFilter filter, DailyActivityType candidate) {
+    return (filter.recordTypes == null ||
+            filter.recordTypes!.contains(candidate)) &&
+        (filter.type == DailyActivityType.all || filter.type == candidate);
   }
 
   String _join(List<String?> values) {

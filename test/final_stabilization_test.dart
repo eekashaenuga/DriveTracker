@@ -73,13 +73,20 @@ void main() {
       of: find.byKey(const Key('insightsAcquisitionMetric')),
       matching: find.text(text),
     );
+    await _waitFor(tester, find.byKey(const Key('insightsCostsSection')));
+    await tester.ensureVisible(find.byKey(const Key('insightsCostsSection')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('insightsCostsSection')));
+    await tester.pumpAndSettle();
     await _waitFor(tester, amount('£100.00'));
     await tester.runAsync(() => controller.archiveVehicle(selected.id));
     await _waitFor(tester, amount('£200.00'));
+    await tester.tap(find.byType(BackButton).hitTestable().last);
+    await tester.pumpAndSettle();
     expect(
       find.descendant(
         of: find.byKey(const Key('insightsVehicleSelector')),
-        matching: find.text('All vehicles'),
+        matching: find.text('All active vehicles'),
       ),
       findsOneWidget,
     );
@@ -96,6 +103,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('insightsCostsSection')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('insightsCostsSection')));
+    await _waitFor(tester, amount('£200.00'));
     expect(amount('£200.00'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

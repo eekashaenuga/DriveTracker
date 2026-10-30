@@ -39,6 +39,11 @@ class FuelEconomyCalculator {
     final intervals = <FuelEconomyInterval>[];
 
     for (final refuel in sorted) {
+      if (refuel.fuelType == FuelType.electric) {
+        startFull = null;
+        accumulatedMillilitres = 0;
+        continue;
+      }
       if (refuel.missedPreviousRefuel) {
         startFull = refuel.isFullTank ? refuel : null;
         accumulatedMillilitres = 0;
@@ -90,6 +95,23 @@ class FuelEconomyCalculator {
     return intervals;
   }
 
+  static double? aggregateUkMpg(
+    Iterable<FuelEconomyInterval> intervals,
+    DistanceUnit unit,
+  ) {
+    var distance = 0;
+    var volume = 0;
+    for (final interval in intervals) {
+      distance += interval.distance;
+      volume += interval.volumeMillilitres;
+    }
+    return _ukMpg(
+      distance: distance,
+      volumeMillilitres: volume,
+      distanceUnit: unit,
+    );
+  }
+
   static FuelEconomyInterval? latestValidInterval({
     required List<Refuel> refuels,
     required DistanceUnit distanceUnit,
@@ -112,15 +134,15 @@ class FuelEconomyCalculator {
     if (distance <= 0 || volumeMillilitres <= 0) {
       return null;
     }
-    if (distanceUnit != DistanceUnit.miles) {
-      return null;
-    }
 
     final litres = volumeMillilitres / FuelNumbers.millilitresPerLitre;
     final gallons = litres * FuelNumbers.imperialGallonsPerLitre;
     if (gallons <= 0) {
       return null;
     }
-    return distance / gallons;
+    final miles = distanceUnit == DistanceUnit.miles
+        ? distance.toDouble()
+        : distance / 1.609344;
+    return miles / gallons;
   }
 }
