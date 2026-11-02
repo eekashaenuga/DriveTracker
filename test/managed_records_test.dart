@@ -578,6 +578,7 @@ void main() {
         await _tap(tester, find.byTooltip('Back'));
         await _until(tester, row);
         if (type == DailyActivityType.expense) {
+          await _tap(tester, find.text('Filters'));
           await _tap(
             tester,
             find.byKey(const Key('historyCategoryFilterField')),
@@ -586,6 +587,13 @@ void main() {
           Navigator.of(tester.element(find.text('Added while editing').last))
               .pop();
           await tester.pump(const Duration(milliseconds: 400));
+          await _tap(tester, find.text('Apply filters'));
+          await _until(tester, find.byKey(const Key('historyLoaded')));
+          await tester.scrollUntilVisible(
+            row,
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
         }
         expect(
           find.descendant(

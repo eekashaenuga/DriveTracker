@@ -1818,9 +1818,18 @@ void main() {
         () => controller.history(drillFilter),
       );
       expect(matchingRows!.map((r) => r.recordId), contains(expenseId));
-      await _scrollUntilFound(
-        tester,
+      await _pumpUntilFound(tester, find.byKey(const Key('historyLoaded')));
+      await tester.scrollUntilVisible(
         find.byKey(Key('historyActivity_expense_$expenseId')),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('historyList')),
+              matching: find.byWidgetPredicate(
+                (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+              ),
+            )
+            .first,
       );
 
       expect(find.text('History'), findsWidgets);
@@ -2163,24 +2172,24 @@ void main() {
       tester,
       find.descendant(
         of: find.byKey(const Key('historyFilterField')),
-        matching: find.text('Expense'),
+        matching: find.text('Expenses'),
       ),
     );
-    await _tapAndPump(
-      tester,
-      find.byKey(const Key('historyCustomRangeButton')),
-    );
+    await _tapAndPump(tester, find.byKey(const Key('historyDateButton')));
+    await _tapAndPump(tester, find.text('Custom').last);
     await _pumpUntilFound(
       tester,
       find.byKey(const Key('historyCustomRangePicker')),
     );
     await _selectDatePickerRange(tester, startDay: 5, endDay: 5);
     await _pumpUntilFound(tester, find.text('5 Sep 2026'));
+    await _tapAndPump(tester, find.text('Filters'));
     await _selectDropdownItem(
       tester,
       field: find.byKey(const Key('historyCategoryFilterField')),
       label: 'Parking',
     );
+    await _tapAndPump(tester, find.text('Apply filters'));
     await tester.enterText(
       find.byKey(const Key('historySearchField')),
       'airport',

@@ -2,6 +2,8 @@ import 'income_activity.dart';
 import '../../../core/calculations/analytics_date_range.dart';
 import 'daily_activity.dart';
 
+enum HistorySort { newest, oldest }
+
 const Object _unset = Object();
 
 class HistoryFilter {
@@ -15,6 +17,8 @@ class HistoryFilter {
     this.range = AnalyticsDateRange.all,
     this.categoryId,
     this.searchQuery = '',
+    this.sort = HistorySort.newest,
+    this.selectedActivityType,
   });
 
   final String? vehicleId;
@@ -31,6 +35,8 @@ class HistoryFilter {
   final AnalyticsDateRange range;
   final String? categoryId;
   final String searchQuery;
+  final HistorySort sort;
+  final IncomeActivityType? selectedActivityType;
 
   bool get hasSearch => searchQuery.trim().isNotEmpty;
 
@@ -40,6 +46,8 @@ class HistoryFilter {
         type == DailyActivityType.all &&
         range == AnalyticsDateRange.all &&
         categoryId == null &&
+        selectedActivityType == null &&
+        sort == HistorySort.newest &&
         searchQuery.trim().isEmpty;
   }
 
@@ -49,6 +57,8 @@ class HistoryFilter {
     AnalyticsDateRange? range,
     Object? categoryId = _unset,
     String? searchQuery,
+    HistorySort? sort,
+    Object? selectedActivityType = _unset,
   }) {
     return HistoryFilter(
       vehicleId: vehicleId == _unset ? this.vehicleId : vehicleId as String?,
@@ -62,6 +72,10 @@ class HistoryFilter {
           ? this.categoryId
           : categoryId as String?,
       searchQuery: searchQuery ?? this.searchQuery,
+      sort: sort ?? this.sort,
+      selectedActivityType: selectedActivityType == _unset
+          ? this.selectedActivityType
+          : selectedActivityType as IncomeActivityType?,
     );
   }
 }

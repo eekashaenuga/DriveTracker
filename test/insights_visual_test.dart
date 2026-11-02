@@ -122,26 +122,10 @@ Future<DriveTrackerController> _seed(WidgetTester t) async {
 }
 
 Future<void> _finishHistoryQueries(WidgetTester t) async {
-  final futures = t
-      .widgetList<FutureBuilder>(
-        find.byWidgetPredicate((w) => w is FutureBuilder),
-      )
-      .map((w) => w.future)
-      .whereType<Future<Object?>>()
-      .toList();
-  var finished = false;
-  Future.wait(futures).then((_) => finished = true);
-  for (var i = 0; i < 300 && !finished; i++) {
-    await t.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await t.pump(const Duration(milliseconds: 5));
-  }
-  expect(
-    finished,
-    isTrue,
-    reason: 'History queries must finish before closing the route.',
-  );
+  // At large text the lazy results sliver starts below the viewport.
+  await t.drag(find.byKey(const Key('historyList')), const Offset(0, -500));
+  await t.pump();
+  await waitInsights(t, find.byKey(const Key('historyLoaded')));
   await t.pumpAndSettle();
 }
 

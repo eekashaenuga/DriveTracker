@@ -1,149 +1,543 @@
+import '../../../shared/widgets/dt_bottom_sheet.dart';
+
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../app/router/app_navigation.dart';
-import '../../../app/theme/dt_tokens.dart';
 import '../../../core/calculations/analytics_date_range.dart';
-import '../../../core/utilities/formatters.dart';
 import '../../../shared/widgets/analytics_date_range_picker.dart';
-import '../../../shared/widgets/dt_activity_row.dart';
-import '../../../shared/widgets/dt_empty_state.dart';
-import '../../vehicles/domain/vehicle.dart';
+import '../../insights/presentation/insight_formatters.dart';
 import '../domain/daily_activity.dart';
 import '../domain/history_filter.dart';
-import '../domain/record_category.dart';
+import '../domain/history_page.dart';
+import 'history_record_row.dart';
+import 'history_filter_sheet.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({this.initialFilter, super.key});
-
   final HistoryFilter? initialFilter;
-
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
   late HistoryFilter _filter = widget.initialFilter ?? const HistoryFilter();
-  late final TextEditingController _searchController = TextEditingController(
-    text: _filter.searchQuery,
-  );
-  Future<List<DailyActivity>>? _activitiesFuture;
-  Future<List<RecordCategory>>? _categoriesFuture;
-  String? _loadedSignature;
-  bool _initializedScope = false;
+  HistoryFilter? _inherited;
+  final _search = TextEditingController();
+  final _scroll = ScrollController();
+  Timer? _debounce;
+  List<DailyActivity> _rows = [];
+  HistoryCursor? _next;
+  bool _loading = true, _failed = false, _archived = false;
+  bool _failedMore = false;
+  int _generation = 0, _revision = -1;
+  String _signature = '';
+  @override
+  void initState() {
+    super.initState();
+    _inherited = widget.initialFilter;
+    _search.text = _filter.searchQuery;
+  }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _debounce?.cancel();
+    _search.dispose();
+    _scroll.dispose();
     super.dispose();
+  }
+
+  HistoryFilter _effective(DriveTrackerController c) {
+    final base = _inherited;
+    final ids =
+        base?.vehicleIds ??
+        (base?.vehicleId != null
+            ? [base!.vehicleId!]
+            : (_archived
+                      ? [...c.activeVehicles, ...c.archivedVehicles]
+                      : c.activeVehicles)
+                  .map((v) => v.id)
+                  .toList());
+    var types = base?.recordTypes;
+    if (base != null && base.type != DailyActivityType.all) {
+      types = {base.type}.intersection(types ?? {base.type});
+    }
+    var category = _filter.categoryId ?? base?.categoryId;
+    if (base?.categoryId != null &&
+        _filter.categoryId != null &&
+        base!.categoryId != _filter.categoryId) {
+      types = {};
+    }
+    final requested = _filter.range.resolve(c.currentTime);
+    final bounds = base?.range.resolve(c.currentTime);
+    var start = requested.startInclusive, end = requested.endExclusive;
+    if (bounds?.startInclusive != null &&
+        (start == null || start.isBefore(bounds!.startInclusive!))) {
+      start = bounds!.startInclusive;
+    }
+    if (bounds?.endExclusive != null &&
+        (end == null || end.isAfter(bounds!.endExclusive!))) {
+      end = bounds!.endExclusive;
+    }
+    AnalyticsDateRange range = _filter.range;
+    if (start != null && end != null) {
+      if (!start.isBefore(end)) {
+        types = {};
+        end = DateTime(start.year, start.month, start.day + 1);
+      }
+      range = AnalyticsDateRange.custom(
+        start: start,
+        endInclusive: DateTime(end.year, end.month, end.day - 1),
+      );
+    }
+    return HistoryFilter(
+      vehicleId: _filter.vehicleId,
+      vehicleIds: ids,
+      recordTypes: types,
+      activityTypes: base?.activityTypes,
+      selectedActivityType: _filter.selectedActivityType,
+      operatingCostsOnly: base?.operatingCostsOnly ?? false,
+      type: _filter.type,
+      categoryId: category,
+      range: range,
+      searchQuery: _filter.searchQuery,
+      sort: _filter.sort,
+    );
+  }
+
+  void _reload({bool resetScroll = false}) {
+    _signature = '';
+    if (resetScroll && _scroll.hasClients) _scroll.jumpTo(0);
+    setState(() {});
+  }
+
+  void _change(HistoryFilter filter) {
+    _filter = filter;
+    _rows = [];
+    _next = null;
+    _reload(resetScroll: true);
+  }
+
+  void _clear() {
+    _debounce?.cancel();
+    _search.clear();
+    _inherited = null;
+    _archived = false;
+    _change(
+      HistoryFilter(
+        vehicleId: context.read<DriveTrackerController>().selectedVehicle?.id,
+      ),
+    );
+  }
+
+  Future<void> _load(HistoryFilter query, {bool more = false}) async {
+    if (more && _loading) return;
+    final generation = more ? _generation : ++_generation;
+    final retainCount = more ? 0 : _rows.length;
+    _loading = true;
+    _failed = false;
+    try {
+      final controller = context.read<DriveTrackerController>();
+      var page = await controller.historyPage(
+        query,
+        after: more ? _next : null,
+      );
+      final loaded = [...page.records];
+      while (!more && loaded.length < retainCount && page.next != null) {
+        if (!mounted || generation != _generation) return;
+        page = await controller.historyPage(query, after: page.next);
+        loaded.addAll(page.records);
+      }
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _rows = [if (more) ..._rows, ...loaded];
+        _next = page.next;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+          _failedMore = more;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<DriveTrackerController>();
-    final selectedVehicle = controller.selectedVehicle;
-    final vehicles = controller.activeVehicles;
-
-    if (!_initializedScope && widget.initialFilter == null) {
-      _initializedScope = true;
-      _filter = _filter.copyWith(vehicleId: selectedVehicle?.id);
-    } else if (!_initializedScope) {
-      _initializedScope = true;
+    final c = context.watch<DriveTrackerController>();
+    if (_revision == -1) {
+      _revision = c.historyRevision;
+      if (widget.initialFilter == null) {
+        _filter = _filter.copyWith(vehicleId: c.selectedVehicle?.id);
+      }
     }
-
-    _categoriesFuture ??= _loadCategories(controller);
-    _ensureActivities(controller);
-
-    if (vehicles.isEmpty) {
-      return const Scaffold(
-        appBar: _HistoryAppBar(),
-        body: DTEmptyState(
-          icon: Icons.history_rounded,
-          title: 'No active vehicles',
-          body: 'Add a vehicle before reviewing History.',
-        ),
-      );
+    final query = _effective(c);
+    final signature = [
+      query.vehicleId,
+      query.vehicleIds,
+      query.recordTypes,
+      query.activityTypes,
+      query.selectedActivityType,
+      query.operatingCostsOnly,
+      query.type,
+      query.categoryId,
+      query.range.preset,
+      query.range.customStart,
+      query.range.customEndInclusive,
+      query.searchQuery,
+      query.sort,
+      c.historyRevision,
+      c.currentTime.toLocal().toString().substring(0, 10),
+    ].join('|');
+    if (signature != _signature) {
+      _signature = signature;
+      _revision = c.historyRevision;
+      unawaited(_load(query));
     }
-
+    final vehicles = [
+      ...c.activeVehicles,
+      if (_archived) ...c.archivedVehicles,
+    ];
+    final filtered =
+        _inherited != null ||
+        _filter.type != DailyActivityType.all ||
+        _filter.hasSearch ||
+        _filter.categoryId != null ||
+        _filter.selectedActivityType != null ||
+        _filter.range != AnalyticsDateRange.all;
+    final entries = <Object>[];
+    String? month;
+    for (final row in _rows) {
+      final d = row.eventDateTime.toLocal();
+      final key = '${d.year}-${d.month}';
+      if (key != month) {
+        month = key;
+        entries.add(
+          '${const ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][d.month - 1]} ${d.year}',
+        );
+      }
+      entries.add(row);
+    }
     return Scaffold(
-      appBar: const _HistoryAppBar(),
+      appBar: AppBar(title: const Text('History')),
       body: SafeArea(
-        child: ListView(
+        child: CustomScrollView(
+          controller: _scroll,
           key: const Key('historyList'),
-          padding: const EdgeInsets.fromLTRB(
-            DTSpacing.lg,
-            DTSpacing.lg,
-            DTSpacing.lg,
-            DTSpacing.xxxl,
-          ),
-          children: [
-            Text(
-              'History',
-              style: Theme.of(context).textTheme.headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: DTSpacing.xs),
-            Text(
-              _scopeLabel(vehicles),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: DTSpacing.lg),
-            if (_filter.isInsightsScope)
-              const Text(
-                'From Insights: record types and vehicle scope are retained. Reset clears this scope.',
-              ),
-            _HistoryFilters(
-              filter: _filter,
-              vehicles: vehicles,
-              categoriesFuture: _categoriesFuture!,
-              searchController: _searchController,
-              onVehicleChanged: (vehicleId) {
-                _setFilter(_filter.copyWith(vehicleId: vehicleId));
-              },
-              onTypeChanged: (type) {
-                _setFilter(_filter.copyWith(type: type, categoryId: null));
-              },
-              onRangeChanged: (range) =>
-                  _setFilter(_filter.copyWith(range: range)),
-              onCustomRangeRequested: _showCustomRangeDialog,
-              onCategoryChanged: (categoryId) {
-                _setFilter(_filter.copyWith(categoryId: categoryId));
-              },
-              onSearchChanged: (value) {
-                _setFilter(_filter.copyWith(searchQuery: value));
-              },
-              onReset: _resetFilters,
-            ),
-            const SizedBox(height: DTSpacing.lg),
-            FutureBuilder<List<DailyActivity>>(
-              future: _activitiesFuture,
-              builder: (context, snapshot) {
-                final activities = snapshot.data;
-                if (activities == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (activities.isEmpty) {
-                  return KeyedSubtree(
-                    key: const Key('historyLoaded'),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: DTSpacing.xl),
-                      child: _HistoryEmptyState(filtered: _hasResultFilters),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(
+                        'historyVehicle_${_filter.vehicleId}_$_archived',
+                      ),
+                      isExpanded: true,
+                      initialValue:
+                          vehicles.any((v) => v.id == _filter.vehicleId)
+                          ? _filter.vehicleId
+                          : '__all__',
+                      decoration: const InputDecoration(
+                        labelText: 'Vehicle',
+                        prefixIcon: Icon(Icons.directions_car_outlined),
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: '__all__',
+                          child: Text(
+                            _archived
+                                ? 'All vehicles including archived'
+                                : 'All active vehicles',
+                          ),
+                        ),
+                        for (final v in vehicles)
+                          DropdownMenuItem(
+                            value: v.id,
+                            child: Text(
+                              '${v.name}${v.isArchived ? ' (archived)' : ''}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) => _change(
+                        _filter.copyWith(vehicleId: v == '__all__' ? null : v),
+                      ),
                     ),
-                  );
-                }
-                return KeyedSubtree(
-                  key: const Key('historyLoaded'),
-                  child: _ActivityList(
-                    activities: activities,
-                    selectedVehicle: selectedVehicle,
-                    showVehicle: _filter.vehicleId == null,
-                    onTap: _openActivity,
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key('historySearchField'),
+                      controller: _search,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        labelText: 'Search records',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _search.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear search',
+                                icon: const Icon(Icons.close),
+                                onPressed: () {
+                                  _debounce?.cancel();
+                                  _search.clear();
+                                  _change(_filter.copyWith(searchQuery: ''));
+                                },
+                              ),
+                      ),
+                      onChanged: (v) {
+                        setState(() {});
+                        _debounce?.cancel();
+                        _debounce = Timer(
+                          const Duration(milliseconds: 300),
+                          () => _change(_filter.copyWith(searchQuery: v)),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      key: const Key('historyFilterField'),
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        for (final type in DailyActivityType.values)
+                          FilterChip(
+                            label: Text(
+                              type == DailyActivityType.expense
+                                  ? 'Expenses'
+                                  : type.label,
+                            ),
+                            selected: _filter.type == type,
+                            onSelected: (_) => _change(
+                              _filter.copyWith(
+                                type: type,
+                                categoryId: null,
+                                selectedActivityType: null,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        TextButton.icon(
+                          key: const Key('historyDateButton'),
+                          onPressed: _dates,
+                          icon: const Icon(Icons.date_range),
+                          label: const Text('Date'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final result = await showHistoryFilters(
+                              context,
+                              _filter,
+                              _archived,
+                            );
+                            if (result != null && mounted) {
+                              _archived = result.archived;
+                              final selected = result.filter.vehicleId;
+                              _change(
+                                !result.archived &&
+                                        selected != null &&
+                                        !c.activeVehicles.any(
+                                          (v) => v.id == selected,
+                                        )
+                                    ? result.filter.copyWith(vehicleId: null)
+                                    : result.filter,
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.tune),
+                          label: const Text('Filters'),
+                        ),
+                        PopupMenuButton<HistorySort>(
+                          tooltip: 'Sort',
+                          initialValue: _filter.sort,
+                          onSelected: (v) => _change(_filter.copyWith(sort: v)),
+                          itemBuilder: (_) => [
+                            for (final v in HistorySort.values)
+                              PopupMenuItem(
+                                value: v,
+                                child: Text(
+                                  v == HistorySort.newest
+                                      ? 'Newest first'
+                                      : 'Oldest first',
+                                ),
+                              ),
+                          ],
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              minHeight: 48,
+                              minWidth: 48,
+                            ),
+                            child: const Center(
+                              widthFactor: 1,
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text('Sort'),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_inherited != null)
+                      Text(
+                        'From Insights: ${_rangeLabel(_inherited!.range)} · ${_inherited!.operatingCostsOnly ? 'operating costs' : _inherited!.type.label}. Filters narrow this scope.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (_inherited != null)
+                          InputChip(
+                            label: const Text('Insights scope'),
+                            onDeleted: _clear,
+                            deleteButtonTooltipMessage:
+                                'Clear all filters and Insights scope',
+                          ),
+                        if (_filter.range != AnalyticsDateRange.all)
+                          InputChip(
+                            label: Text(_rangeLabel(_filter.range)),
+                            onDeleted: () => _change(
+                              _filter.copyWith(range: AnalyticsDateRange.all),
+                            ),
+                          ),
+                        if (_filter.categoryId != null)
+                          InputChip(
+                            label: FutureBuilder(
+                              future: c.categoryById(_filter.categoryId!),
+                              builder: (context, snapshot) => Text(
+                                snapshot.data?.name ?? 'Category selected',
+                              ),
+                            ),
+                            onDeleted: () =>
+                                _change(_filter.copyWith(categoryId: null)),
+                          ),
+                        if (_filter.selectedActivityType != null)
+                          InputChip(
+                            label: Text(_filter.selectedActivityType!.label),
+                            onDeleted: () => _change(
+                              _filter.copyWith(selectedActivityType: null),
+                            ),
+                          ),
+                        if (_filter.sort == HistorySort.oldest)
+                          InputChip(
+                            label: const Text('Oldest first'),
+                            onDeleted: () => _change(
+                              _filter.copyWith(sort: HistorySort.newest),
+                            ),
+                          ),
+                        if (_archived)
+                          InputChip(
+                            label: const Text('Archived vehicles included'),
+                            onDeleted: () {
+                              _archived = false;
+                              _change(_filter.copyWith(vehicleId: null));
+                            },
+                          ),
+                        if (filtered ||
+                            _archived ||
+                            _filter.sort != HistorySort.newest)
+                          TextButton(
+                            key: const Key('historyResetFiltersButton'),
+                            onPressed: _clear,
+                            child: const Text('Clear all'),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (vehicles.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      const Text('No active vehicles'),
+                      const Text(
+                        'Add or restore a vehicle, or include archived vehicles in Filters.',
+                      ),
+                    ],
                   ),
-                );
-              },
+                ),
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList.builder(
+                key: _loading ? null : const Key('historyLoaded'),
+                itemCount: entries.length,
+                itemBuilder: (context, index) {
+                  final item = entries[index];
+                  if (item is String) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      child: Text(
+                        item,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    );
+                  }
+                  final row = item as DailyActivity;
+                  return HistoryRecordRow(
+                    key: Key(
+                      'historyActivity_${row.type.name}_${row.recordId}',
+                    ),
+                    record: row,
+                    showVehicle: _filter.vehicleId == null,
+                    onTap: () => _openActivity(row),
+                  );
+                },
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    if (_loading)
+                      const CircularProgressIndicator()
+                    else if (_failed) ...[
+                      const Text('Could not load History.'),
+                      TextButton(
+                        onPressed: () => !_failedMore
+                            ? _reload()
+                            : setState(
+                                () => unawaited(_load(query, more: true)),
+                              ),
+                        child: const Text('Retry'),
+                      ),
+                    ] else if (_rows.isEmpty && vehicles.isNotEmpty) ...[
+                      Text(filtered ? 'No matching records' : 'No history yet'),
+                      Text(
+                        filtered ? 'No results match these filters.' : 'Fuel, expenses, income, service and odometer records will appear here.',
+                      ),
+                      if (filtered)
+                        TextButton(
+                          onPressed: _clear,
+                          child: const Text('Clear filters'),
+                        ),
+                    ] else if (_next != null)
+                      OutlinedButton(
+                        onPressed: () {
+                          setState(() => unawaited(_load(query, more: true)));
+                        },
+                        child: const Text('Load more records'),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -151,533 +545,102 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Future<List<RecordCategory>> _loadCategories(
-    DriveTrackerController controller,
-  ) async {
-    final expense = await controller.categoriesFor(
-      RecordCategoryType.expense,
-      includeArchived: true,
-    );
-    final income = await controller.categoriesFor(
-      RecordCategoryType.income,
-      includeArchived: true,
-    );
-    return [...expense, ...income];
-  }
-
-  void _ensureActivities(DriveTrackerController controller) {
-    final signature = _filterSignature(_filter);
-    if (_activitiesFuture == null || _loadedSignature != signature) {
-      _loadedSignature = signature;
-      _activitiesFuture = controller.history(_filter);
-    }
-  }
-
-  void _setFilter(HistoryFilter filter) {
-    setState(() {
-      _filter = filter;
-      _loadedSignature = null;
-    });
-  }
-
-  void _resetFilters() {
-    final selectedVehicle = context
-        .read<DriveTrackerController>()
-        .selectedVehicle;
-    setState(() {
-      _filter = HistoryFilter(vehicleId: selectedVehicle?.id);
-      _searchController.clear();
-      _loadedSignature = null;
-    });
-  }
-
-  Future<void> _showCustomRangeDialog() async {
-    final controller = context.read<DriveTrackerController>();
-    final customRange = await pickAnalyticsDateRange(
+  String _rangeLabel(AnalyticsDateRange r) => switch (r.preset) {
+    AnalyticsRangePreset.custom => InsightFormat.customRange(r),
+    AnalyticsRangePreset.all => 'All time',
+    AnalyticsRangePreset.week => 'This week',
+    AnalyticsRangePreset.month => 'This month',
+    AnalyticsRangePreset.year => 'This year',
+    _ => r.preset.label,
+  };
+  Future<void> _dates() async {
+    final preset = await showDTBottomSheet<AnalyticsRangePreset>(
       context: context,
-      currentRange: _filter.range,
-      currentDate: controller.currentTime,
-      pickerKey: const Key('historyCustomRangePicker'),
-      helpText: 'Select history range',
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final p in AnalyticsRangePreset.values)
+                ListTile(
+                  title: Text(_rangeLabel(AnalyticsDateRange.preset(p))),
+                  onTap: () => Navigator.pop(context, p),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
-    if (customRange == null || !mounted) {
-      return;
+    if (preset == null || !mounted) return;
+    if (preset == AnalyticsRangePreset.custom) {
+      final range = await pickAnalyticsDateRange(
+        context: context,
+        currentRange: _filter.range,
+        currentDate: context.read<DriveTrackerController>().currentTime,
+        pickerKey: const Key('historyCustomRangePicker'),
+        helpText: 'Select history range',
+      );
+      if (range != null && mounted) _change(_filter.copyWith(range: range));
+    } else {
+      _change(_filter.copyWith(range: AnalyticsDateRange.preset(preset)));
     }
-    _setFilter(_filter.copyWith(range: customRange));
   }
 
   Future<void> _openActivity(DailyActivity activity) async {
     final controller = context.read<DriveTrackerController>();
-    switch (activity.type) {
-      case DailyActivityType.refuel:
-        final refuel = await controller.refuelById(activity.recordId);
-        if (refuel != null && mounted) {
-          await AppNavigation.openRefuel(context, refuel: refuel);
-        }
-        break;
-      case DailyActivityType.expense:
-        final expense = await controller.expenseById(activity.recordId);
-        if (expense != null && mounted) {
-          await AppNavigation.openExpense(context, expense: expense);
-        }
-        break;
-      case DailyActivityType.income:
-        final income = await controller.incomeById(activity.recordId);
-        if (income != null && mounted) {
-          await AppNavigation.openIncome(context, income: income);
-        }
-        break;
-      case DailyActivityType.service:
-        final service = await controller.serviceRecordById(activity.recordId);
-        if (service != null && mounted) {
-          await AppNavigation.openService(context, service: service);
-        }
-        break;
-      case DailyActivityType.odometer:
-        if (mounted) {
-          await AppNavigation.openRecordDetails(
-            context,
-            DailyActivityType.odometer,
-            activity.recordId,
-          );
-        }
-        break;
-      case DailyActivityType.all:
-        break;
-    }
-    if (mounted) {
-      setState(() {
-        _loadedSignature = null;
-        _categoriesFuture = _loadCategories(controller);
-      });
-    }
-  }
-
-  String _scopeLabel(List<Vehicle> vehicles) {
-    final vehicleId = _filter.vehicleId;
-    if (vehicleId == null) {
-      return _filter.vehicleIds == null
-          ? 'All vehicles'
-          : 'Insights vehicle scope';
-    }
-    for (final vehicle in vehicles) {
-      if (vehicle.id == vehicleId) {
-        return vehicle.description;
+    try {
+      switch (activity.type) {
+        case DailyActivityType.refuel:
+          final refuel = await controller.refuelById(activity.recordId);
+          if (refuel == null) throw StateError('Record no longer exists');
+          if (mounted) {
+            await AppNavigation.openRefuel(context, refuel: refuel);
+          }
+          break;
+        case DailyActivityType.expense:
+          final expense = await controller.expenseById(activity.recordId);
+          if (expense == null) throw StateError('Record no longer exists');
+          if (mounted) {
+            await AppNavigation.openExpense(context, expense: expense);
+          }
+          break;
+        case DailyActivityType.income:
+          final income = await controller.incomeById(activity.recordId);
+          if (income == null) throw StateError('Record no longer exists');
+          if (mounted) {
+            await AppNavigation.openIncome(context, income: income);
+          }
+          break;
+        case DailyActivityType.service:
+          final service = await controller.serviceRecordById(activity.recordId);
+          if (service == null) throw StateError('Record no longer exists');
+          if (mounted) {
+            await AppNavigation.openService(context, service: service);
+          }
+          break;
+        case DailyActivityType.odometer:
+          if (mounted) {
+            await AppNavigation.openRecordDetails(
+              context,
+              DailyActivityType.odometer,
+              activity.recordId,
+            );
+          }
+          break;
+        case DailyActivityType.all:
+          break;
       }
-    }
-    return 'Selected vehicle';
-  }
-
-  String _filterSignature(HistoryFilter filter) {
-    return [
-      filter.vehicleId ?? 'all',
-      filter.type.name,
-      filter.range.preset.name,
-      filter.range.customStart?.toIso8601String() ?? '',
-      filter.range.customEndInclusive?.toIso8601String() ?? '',
-      filter.categoryId ?? '',
-      filter.searchQuery.trim(),
-    ].join('|');
-  }
-
-  bool get _hasResultFilters {
-    return _filter.type != DailyActivityType.all ||
-        _filter.range != AnalyticsDateRange.all ||
-        _filter.categoryId != null ||
-        _filter.searchQuery.trim().isNotEmpty;
-  }
-}
-
-class _HistoryAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _HistoryAppBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return AppBar(title: const Text('History'));
-  }
-
-  @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
-}
-
-class _HistoryFilters extends StatelessWidget {
-  const _HistoryFilters({
-    required this.filter,
-    required this.vehicles,
-    required this.categoriesFuture,
-    required this.searchController,
-    required this.onVehicleChanged,
-    required this.onTypeChanged,
-    required this.onRangeChanged,
-    required this.onCustomRangeRequested,
-    required this.onCategoryChanged,
-    required this.onSearchChanged,
-    required this.onReset,
-  });
-
-  final HistoryFilter filter;
-  final List<Vehicle> vehicles;
-  final Future<List<RecordCategory>> categoriesFuture;
-  final TextEditingController searchController;
-  final ValueChanged<String?> onVehicleChanged;
-  final ValueChanged<DailyActivityType> onTypeChanged;
-  final ValueChanged<AnalyticsDateRange> onRangeChanged;
-  final VoidCallback onCustomRangeRequested;
-  final ValueChanged<String?> onCategoryChanged;
-  final ValueChanged<String> onSearchChanged;
-  final VoidCallback onReset;
-
-  static const _allVehicles = '__all_vehicles__';
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final safeSelectedVehicleId =
-        vehicles.any((vehicle) => vehicle.id == filter.vehicleId)
-        ? filter.vehicleId
-        : null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        DropdownButtonFormField<String>(
-          isExpanded: true,
-          key: const Key('historyVehicleFilterField'),
-          initialValue: safeSelectedVehicleId ?? _allVehicles,
-          decoration: const InputDecoration(
-            labelText: 'Vehicle',
-            prefixIcon: Icon(Icons.directions_car_rounded),
-          ),
-          items: [
-            const DropdownMenuItem(
-              value: _allVehicles,
-              child: Text('All vehicles'),
-            ),
-            for (final vehicle in vehicles)
-              DropdownMenuItem(
-                value: vehicle.id,
-                child: Text(vehicle.name, overflow: TextOverflow.ellipsis),
-              ),
-          ],
-          onChanged: (value) {
-            onVehicleChanged(value == _allVehicles ? null : value);
-          },
-        ),
-        const SizedBox(height: DTSpacing.md),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SegmentedButton<DailyActivityType>(
-            key: const Key('historyFilterField'),
-            selected: {filter.type},
-            segments: const [
-              ButtonSegment(value: DailyActivityType.all, label: Text('All')),
-              ButtonSegment(
-                value: DailyActivityType.refuel,
-                label: Text('Fuel'),
-              ),
-              ButtonSegment(
-                value: DailyActivityType.service,
-                label: Text('Service'),
-              ),
-              ButtonSegment(
-                value: DailyActivityType.expense,
-                label: Text('Expense'),
-              ),
-              ButtonSegment(
-                value: DailyActivityType.income,
-                label: Text('Income'),
-              ),
-              ButtonSegment(
-                value: DailyActivityType.odometer,
-                label: Text('Odometer'),
-              ),
-            ],
-            onSelectionChanged: (selection) => onTypeChanged(selection.first),
-          ),
-        ),
-        const SizedBox(height: DTSpacing.md),
-        Wrap(
-          spacing: DTSpacing.sm,
-          runSpacing: DTSpacing.sm,
-          children: [
-            _RangeChip(
-              key: const Key('historyRangeAll'),
-              label: 'All time',
-              selected: filter.range.preset == AnalyticsRangePreset.all,
-              onSelected: () => onRangeChanged(AnalyticsDateRange.all),
-            ),
-            _RangeChip(
-              key: const Key('historyRangeWeek'),
-              label: 'This week',
-              selected: filter.range.preset == AnalyticsRangePreset.week,
-              onSelected: () => onRangeChanged(AnalyticsDateRange.week),
-            ),
-            _RangeChip(
-              key: const Key('historyRangeMonth'),
-              label: 'This month',
-              selected: filter.range.preset == AnalyticsRangePreset.month,
-              onSelected: () => onRangeChanged(AnalyticsDateRange.month),
-            ),
-            _RangeChip(
-              key: const Key('historyRangeYear'),
-              label: 'This year',
-              selected: filter.range.preset == AnalyticsRangePreset.year,
-              onSelected: () => onRangeChanged(AnalyticsDateRange.year),
-            ),
-            FilterChip(
-              key: const Key('historyCustomRangeButton'),
-              selected: filter.range.preset == AnalyticsRangePreset.custom,
-              label: Text(customAnalyticsRangeLabel(filter.range)),
-              onSelected: (_) => onCustomRangeRequested(),
-            ),
-          ],
-        ),
-        const SizedBox(height: DTSpacing.md),
-        FutureBuilder<List<RecordCategory>>(
-          future: categoriesFuture,
-          builder: (context, snapshot) {
-            final categories = _categoriesForType(
-              snapshot.data ?? const [],
-              filter.type,
-            );
-            if (categories.isEmpty) {
-              return const SizedBox.shrink();
-            }
-            final selectedCategoryId =
-                categories.any((category) => category.id == filter.categoryId)
-                ? filter.categoryId
-                : null;
-            return DropdownButtonFormField<String>(
-              isExpanded: true,
-              key: const Key('historyCategoryFilterField'),
-              initialValue: selectedCategoryId ?? '__all_categories__',
-              decoration: const InputDecoration(
-                labelText: 'Category',
-                prefixIcon: Icon(Icons.category_rounded),
-              ),
-              items: [
-                const DropdownMenuItem(
-                  value: '__all_categories__',
-                  child: Text('All categories'),
-                ),
-                for (final category in categories)
-                  DropdownMenuItem(
-                    value: category.id,
-                    child: Text(category.name, overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: (value) {
-                onCategoryChanged(value == '__all_categories__' ? null : value);
-              },
-            );
-          },
-        ),
-        const SizedBox(height: DTSpacing.md),
-        TextField(
-          key: const Key('historySearchField'),
-          controller: searchController,
-          decoration: const InputDecoration(
-            labelText: 'Search history',
-            prefixIcon: Icon(Icons.search_rounded),
-          ),
-          textInputAction: TextInputAction.search,
-          onChanged: onSearchChanged,
-        ),
-        const SizedBox(height: DTSpacing.sm),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            key: const Key('historyResetFiltersButton'),
-            onPressed: onReset,
-            icon: const Icon(Icons.refresh_rounded),
-            label: Text('Reset filters', style: theme.textTheme.labelLarge),
-          ),
-        ),
-      ],
-    );
-  }
-
-  List<RecordCategory> _categoriesForType(
-    List<RecordCategory> categories,
-    DailyActivityType type,
-  ) {
-    switch (type) {
-      case DailyActivityType.expense:
-        return categories
-            .where((category) => category.type == RecordCategoryType.expense)
-            .toList();
-      case DailyActivityType.income:
-        return categories
-            .where((category) => category.type == RecordCategoryType.income)
-            .toList();
-      case DailyActivityType.all:
-        return categories;
-      case DailyActivityType.refuel:
-      case DailyActivityType.service:
-      case DailyActivityType.odometer:
-        return const [];
-    }
-  }
-}
-
-class _RangeChip extends StatelessWidget {
-  const _RangeChip({
-    required this.label,
-    required this.selected,
-    required this.onSelected,
-    super.key,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilterChip(
-      selected: selected,
-      label: Text(label),
-      onSelected: (_) => onSelected(),
-    );
-  }
-}
-
-class _HistoryEmptyState extends StatelessWidget {
-  const _HistoryEmptyState({required this.filtered});
-
-  final bool filtered;
-
-  @override
-  Widget build(BuildContext context) {
-    return DTEmptyState(
-      icon: filtered ? Icons.filter_alt_off_rounded : Icons.history_rounded,
-      title: filtered ? 'No matching records' : 'No history yet',
-      body: filtered ? 'No results match these filters.' : 'Fuel, expenses, income, service and odometer records will appear here.',
-    );
-  }
-}
-
-class _ActivityList extends StatelessWidget {
-  const _ActivityList({
-    required this.activities,
-    required this.selectedVehicle,
-    required this.showVehicle,
-    required this.onTap,
-  });
-
-  final List<DailyActivity> activities;
-  final Vehicle? selectedVehicle;
-  final bool showVehicle;
-  final ValueChanged<DailyActivity> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final children = <Widget>[];
-    String? currentMonth;
-    for (final activity in activities) {
-      final month = _monthLabel(activity.eventDateTime);
-      if (month != currentMonth) {
-        currentMonth = month;
-        children.add(
-          Padding(
-            padding: const EdgeInsets.only(
-              top: DTSpacing.lg,
-              bottom: DTSpacing.sm,
-            ),
-            child: Text(
-              month,
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w500),
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open this record. It may have been removed.',
             ),
           ),
         );
       }
-
-      children.add(
-        InkWell(
-          key: Key(
-            'historyActivity_${activity.type.name}_${activity.recordId}',
-          ),
-          onTap: activity.type == DailyActivityType.all
-              ? null
-              : () => onTap(activity),
-          child: DTActivityRow(
-            icon: _iconFor(activity.type),
-            title: activity.title,
-            subtitle: _subtitle(activity),
-            trailing: _trailing(context, activity),
-            accentColor: _activityColor(context, activity.type),
-          ),
-        ),
-      );
     }
-    return Column(children: children);
-  }
-
-  Widget? _trailing(BuildContext context, DailyActivity activity) {
-    final amount = activity.amountMinor;
-    if (amount == null) {
-      return null;
-    }
-    final color = activity.type == DailyActivityType.income
-        ? Theme.of(context).colorScheme.tertiary
-        : Theme.of(context).colorScheme.onSurface;
-    return Text(
-      DTFormatters.moneyMinor(amount),
-      style: Theme.of(context).textTheme.labelLarge
-          ?.copyWith(color: color, fontWeight: FontWeight.w500),
-    );
-  }
-
-  String _subtitle(DailyActivity activity) {
-    final unit = activity.vehicleDistanceUnit ?? selectedVehicle?.distanceUnit;
-    final parts = <String>[
-      DTFormatters.dateTime(activity.eventDateTime),
-      if (showVehicle && activity.vehicleName != null) activity.vehicleName!,
-      activity.subtitle,
-      if (activity.odometer != null && unit != null)
-        DTFormatters.odometer(activity.odometer, unit),
-    ];
-    return parts.where((part) => part.trim().isNotEmpty).join(' / ');
-  }
-
-  IconData _iconFor(DailyActivityType type) {
-    return switch (type) {
-      DailyActivityType.refuel => Icons.local_gas_station_rounded,
-      DailyActivityType.expense => Icons.payments_outlined,
-      DailyActivityType.income => Icons.work_outline_rounded,
-      DailyActivityType.service => Icons.build_circle_outlined,
-      DailyActivityType.odometer => Icons.speed_rounded,
-      DailyActivityType.all => Icons.history_rounded,
-    };
-  }
-
-  Color _activityColor(BuildContext context, DailyActivityType type) {
-    return switch (type) {
-      DailyActivityType.refuel => DTAccents.fuel(context),
-      DailyActivityType.expense => DTAccents.expense(context),
-      DailyActivityType.income => DTAccents.income(context),
-      DailyActivityType.service => DTAccents.service(context),
-      DailyActivityType.odometer => DTAccents.odometer(context),
-      DailyActivityType.all => DTAccents.neutral(context),
-    };
-  }
-
-  String _monthLabel(DateTime value) {
-    final local = value.toLocal();
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${months[local.month - 1]} ${local.year}';
+    if (mounted) _reload();
   }
 }

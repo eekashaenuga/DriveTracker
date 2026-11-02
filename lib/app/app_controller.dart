@@ -1,3 +1,4 @@
+import '../features/daily_records/domain/history_page.dart';
 import '../features/documents/domain/vehicle_document_overview.dart';
 import '../core/notifications/notification_target.dart';
 import '../features/daily_records/data/income_activity_expense_repository.dart';
@@ -454,6 +455,14 @@ class DriveTrackerController extends ChangeNotifier {
       limit: 100,
     );
   }
+
+  int _historyRevision = 0;
+  int get historyRevision => _historyRevision;
+
+  Future<HistoryPage> historyPage(
+    HistoryFilter filter, {
+    HistoryCursor? after,
+  }) => _activityRepository.page(filter, after: after, now: _clock());
 
   Future<List<DailyActivity>> history(HistoryFilter filter) {
     return _activityRepository.search(filter, now: _clock());
@@ -1153,6 +1162,7 @@ class DriveTrackerController extends ChangeNotifier {
       _errorMessage = 'Something went wrong. Please try again.';
       rethrow;
     } finally {
+      _historyRevision++;
       _busy = false;
       notifyListeners();
     }

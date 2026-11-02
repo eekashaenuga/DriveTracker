@@ -1,3 +1,4 @@
+import '../domain/history_page.dart';
 import '../domain/income_activity.dart';
 
 import 'package:sqflite/sqflite.dart' as sqflite;
@@ -35,35 +36,64 @@ class ActivityRepository {
     // Analytics drill-through must not silently truncate a total to the ordinary
     // History preview limit. Only the explicitly constrained scope is loaded.
     if (filter.isInsightsScope) limit = 2147483647;
+    return _load(filter, limit, now, executor, null);
+  }
+
+  /// Bounded keyset paging. A source mutation resets the UI cursor.
+  Future<HistoryPage> page(
+    HistoryFilter filter, {
+    HistoryCursor? after,
+    int pageSize = 50,
+    DateTime? now,
+  }) async {
+    if (pageSize < 1 || pageSize > 200) {
+      throw ArgumentError.value(pageSize, 'pageSize');
+    }
+    final rows = await _load(filter, pageSize + 1, now, null, after);
+    final records = rows.take(pageSize).toList();
+    return HistoryPage(
+      records,
+      rows.length > pageSize ? HistoryCursor.after(records.last) : null,
+    );
+  }
+
+  Future<List<DailyActivity>> _load(
+    HistoryFilter filter,
+    int limit,
+    DateTime? now,
+    sqflite.DatabaseExecutor? executor,
+    HistoryCursor? after,
+  ) async {
     final db = await _executor(executor);
     final range = filter.range.resolve(now ?? DateTime.now());
     final activities = <DailyActivity>[];
 
     if (_includes(filter, DailyActivityType.refuel) &&
         filter.categoryId == null) {
-      activities.addAll(await _refuels(db, filter, range, limit));
+      activities.addAll(await _refuels(db, filter, range, limit, after));
     }
     if (_includes(filter, DailyActivityType.expense)) {
-      activities.addAll(await _expenses(db, filter, range, limit));
+      activities.addAll(await _expenses(db, filter, range, limit, after));
     }
     if (_includes(filter, DailyActivityType.income)) {
-      activities.addAll(await _income(db, filter, range, limit));
+      activities.addAll(await _income(db, filter, range, limit, after));
     }
     if (_includes(filter, DailyActivityType.service) &&
         filter.categoryId == null) {
-      activities.addAll(await _services(db, filter, range, limit));
+      activities.addAll(await _services(db, filter, range, limit, after));
     }
     if (_includes(filter, DailyActivityType.odometer) &&
         filter.categoryId == null) {
-      activities.addAll(await _manualOdometers(db, filter, range, limit));
+      activities.addAll(
+        await _manualOdometers(db, filter, range, limit, after),
+      );
     }
 
     activities.sort((a, b) {
-      final eventCompare = b.eventDateTime.compareTo(a.eventDateTime);
-      if (eventCompare != 0) {
-        return eventCompare;
-      }
-      return b.createdAt.compareTo(a.createdAt);
+      var order = a.eventDateTime.compareTo(b.eventDateTime);
+      if (order == 0) order = a.type.index.compareTo(b.type.index);
+      if (order == 0) order = a.recordId.compareTo(b.recordId);
+      return filter.sort == HistorySort.oldest ? order : -order;
     });
     return activities.take(limit).toList();
   }
@@ -73,8 +103,10 @@ class ActivityRepository {
     HistoryFilter filter,
     ResolvedAnalyticsRange range,
     int limit,
+    HistoryCursor? after,
   ) async {
     final query = _activityQuery(
+      after: after,
       alias: 'r',
       filter: filter,
       range: range,
@@ -94,7 +126,7 @@ class ActivityRepository {
       FROM refuels r
       JOIN vehicles v ON v.id = r.vehicle_id
       ${query.whereClause}
-      ORDER BY r.event_datetime DESC, r.created_at DESC
+      ORDER BY r.event_datetime ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}, r.id ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}
       LIMIT ?
       ''',
       [...query.args, limit],
@@ -128,8 +160,10 @@ class ActivityRepository {
     HistoryFilter filter,
     ResolvedAnalyticsRange range,
     int limit,
+    HistoryCursor? after,
   ) async {
     final query = _activityQuery(
+      after: after,
       alias: 'e',
       filter: filter,
       range: range,
@@ -152,7 +186,7 @@ class ActivityRepository {
       JOIN record_categories c ON c.id = e.category_id
       JOIN vehicles v ON v.id = e.vehicle_id
       ${query.whereClause}
-      ORDER BY e.event_datetime DESC, e.created_at DESC
+      ORDER BY e.event_datetime ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}, e.id ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}
       LIMIT ?
       ''',
       [...query.args, limit],
@@ -185,8 +219,10 @@ class ActivityRepository {
     HistoryFilter filter,
     ResolvedAnalyticsRange range,
     int limit,
+    HistoryCursor? after,
   ) async {
     final query = _activityQuery(
+      after: after,
       alias: 'i',
       filter: filter,
       range: range,
@@ -208,7 +244,7 @@ class ActivityRepository {
       JOIN record_categories c ON c.id = i.category_id
       JOIN vehicles v ON v.id = i.vehicle_id
       ${query.whereClause}
-      ORDER BY i.event_datetime DESC, i.created_at DESC
+      ORDER BY i.event_datetime ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}, i.id ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}
       LIMIT ?
       ''',
       [...query.args, limit],
@@ -248,8 +284,10 @@ class ActivityRepository {
     HistoryFilter filter,
     ResolvedAnalyticsRange range,
     int limit,
+    HistoryCursor? after,
   ) async {
     final query = _activityQuery(
+      after: after,
       alias: 'o',
       filter: filter,
       range: range,
@@ -268,7 +306,7 @@ class ActivityRepository {
       JOIN vehicles v ON v.id = o.vehicle_id
       ${query.whereClause}
         AND o.source_type = ?
-      ORDER BY o.event_datetime DESC, o.created_at DESC
+      ORDER BY o.event_datetime ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}, o.id ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}
       LIMIT ?
       ''',
       [...query.args, 'MANUAL', limit],
@@ -298,8 +336,10 @@ class ActivityRepository {
     HistoryFilter filter,
     ResolvedAnalyticsRange range,
     int limit,
+    HistoryCursor? after,
   ) async {
     final query = _activityQuery(
+      after: after,
       alias: 's',
       filter: filter,
       range: range,
@@ -317,8 +357,8 @@ class ActivityRepository {
             FROM service_items search_items
             WHERE search_items.service_id = s.id
               AND (
-                search_items.item_name LIKE ? COLLATE NOCASE
-                OR COALESCE(search_items.notes, '') LIKE ? COLLATE NOCASE
+                search_items.item_name LIKE ? ESCAPE '!' COLLATE NOCASE
+                OR COALESCE(search_items.notes, '') LIKE ? ESCAPE '!' COLLATE NOCASE
               )
           )
           ''',
@@ -347,7 +387,7 @@ class ActivityRepository {
       FROM services s
       JOIN vehicles v ON v.id = s.vehicle_id
       ${query.whereClause}
-      ORDER BY s.event_datetime DESC, s.created_at DESC
+      ORDER BY s.event_datetime ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}, s.id ${filter.sort == HistorySort.oldest ? 'ASC' : 'DESC'}
       LIMIT ?
       ''',
       [...query.args, limit],
@@ -383,6 +423,7 @@ class ActivityRepository {
 
   _ActivityQuery _activityQuery({
     required String alias,
+    HistoryCursor? after,
     required HistoryFilter filter,
     required ResolvedAnalyticsRange range,
     String? categoryColumn,
@@ -392,6 +433,33 @@ class ActivityRepository {
   }) {
     final conditions = <String>[];
     final args = <Object?>[];
+    if (after != null) {
+      final type = switch (alias) {
+        'r' => DailyActivityType.refuel,
+        'e' => DailyActivityType.expense,
+        'i' => DailyActivityType.income,
+        's' => DailyActivityType.service,
+        _ => DailyActivityType.odometer,
+      };
+      final op = filter.sort == HistorySort.oldest ? '>' : '<';
+      conditions.add(
+        '($alias.event_datetime $op ? OR ($alias.event_datetime = ? AND (? $op ? OR (? = ? AND $alias.id $op ?))))',
+      );
+      final date = after.date.toUtc().toIso8601String();
+      args.addAll([
+        date,
+        date,
+        type.index,
+        after.type.index,
+        type.index,
+        after.type.index,
+        after.id,
+      ]);
+    }
+    if (filter.selectedActivityType != null) {
+      conditions.add(alias == 'i' ? 'i.activity_type = ?' : '1 = 0');
+      if (alias == 'i') args.add(filter.selectedActivityType!.name);
+    }
 
     if (filter.vehicleIds != null) {
       if (filter.vehicleIds!.isEmpty) {
@@ -443,12 +511,27 @@ class ActivityRepository {
 
     final search = filter.searchQuery.trim();
     if (search.isNotEmpty) {
-      final like = '%$search%';
+      final escaped = search
+          .replaceAll('!', '!!')
+          .replaceAll('%', '!%')
+          .replaceAll('_', '!_');
+      final like = '%$escaped%';
       final searchConditions = <String>[
         for (final column in searchColumns)
-          'COALESCE($column, \'\') LIKE ? COLLATE NOCASE',
+          "COALESCE($column, '') LIKE ? ESCAPE '!' COLLATE NOCASE",
       ];
       args.addAll(List<Object?>.filled(searchColumns.length, like));
+      if (alias == 'i') {
+        final labels = IncomeActivityType.values
+            .where((t) => t.label.toLowerCase().contains(search.toLowerCase()))
+            .toList();
+        if (labels.isNotEmpty) {
+          searchConditions.add(
+            'i.activity_type IN (${List.filled(labels.length, '?').join(',')})',
+          );
+          args.addAll(labels.map((t) => t.name));
+        }
+      }
       if (extraSearchSql != null) {
         searchConditions.add(extraSearchSql);
         args.addAll(List<Object?>.filled(extraSearchArgCount, like));
