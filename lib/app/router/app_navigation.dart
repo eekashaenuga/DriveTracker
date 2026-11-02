@@ -1,3 +1,6 @@
+import '../../features/reports/domain/report_service.dart';
+import '../../features/reports/presentation/export_reports_screen.dart';
+
 import 'package:provider/provider.dart';
 
 import '../app_controller.dart';
@@ -254,6 +257,11 @@ class AppNavigation {
   static Future<void> openVehicleUnits(BuildContext context) {
     return _push<void>(context, (_) => const VehicleUnitsScreen());
   }
+
+  static Future<void> openReports(BuildContext context) => _push<void>(
+    context,
+    (_) => ExportReportsScreen(service: context.read<ReportService>()),
+  );
 
   static Future<void> openDataStorage(BuildContext context) {
     return _push<void>(context, (_) => const DataStorageScreen());

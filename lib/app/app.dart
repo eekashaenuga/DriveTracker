@@ -1,3 +1,5 @@
+import '../features/reports/domain/report_service.dart';
+import '../features/reports/data/report_repository.dart';
 import 'router/reminder_notification_router.dart';
 import 'router/app_navigation.dart';
 import '../core/notifications/notification_target.dart';
@@ -157,20 +159,23 @@ class _DriveTrackerAppState extends State<DriveTrackerApp>
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: _controller,
-      child: Consumer<DriveTrackerController>(
-        builder: (context, controller, _) {
-          return MaterialApp(
-            navigatorKey: _navigatorKey,
-            title: ProductIdentity.name,
-            debugShowCheckedModeBanner: false,
-            theme: DTTheme.light(),
-            darkTheme: DTTheme.dark(),
-            themeMode: controller.themeMode,
-            home: const _DriveTrackerBootstrap(),
-          );
-        },
+    return Provider<ReportService>(
+      create: (_) => ReportService(ReportRepository(widget.database)),
+      child: ChangeNotifierProvider.value(
+        value: _controller,
+        child: Consumer<DriveTrackerController>(
+          builder: (context, controller, _) {
+            return MaterialApp(
+              navigatorKey: _navigatorKey,
+              title: ProductIdentity.name,
+              debugShowCheckedModeBanner: false,
+              theme: DTTheme.light(),
+              darkTheme: DTTheme.dark(),
+              themeMode: controller.themeMode,
+              home: const _DriveTrackerBootstrap(),
+            );
+          },
+        ),
       ),
     );
   }

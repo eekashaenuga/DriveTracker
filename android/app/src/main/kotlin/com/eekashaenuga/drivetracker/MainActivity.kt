@@ -32,6 +32,41 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "drivetracker/reports")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "cacheRoot" -> {
+                        val root = File(cacheDir, "reports")
+                        root.mkdirs()
+                        result.success(root.absolutePath)
+                    }
+                    "save" -> saveFile(call.argument<String>("sourcePath"), call.argument<String>("suggestedName"), call.argument<String>("mimeType"), result, background = true)
+                    "open", "share" -> {
+                        try {
+                            val path = call.argument<String>("path") ?: throw IllegalArgumentException("Missing report")
+                            val file = File(path).canonicalFile
+                            val root = File(cacheDir, "reports").canonicalFile
+                            val mime = call.argument<String>("mimeType")
+                            if (!file.path.startsWith(root.path + File.separator) || !file.isFile ||
+                                mime !in listOf("application/pdf", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) {
+                                throw IllegalArgumentException("Report is unavailable")
+                            }
+                            val uri = FileProvider.getUriForFile(this, "$packageName.attachments", file)
+                            val intent = if (call.method == "share") Intent(Intent.ACTION_SEND).apply {
+                                type = mime
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                clipData = android.content.ClipData.newRawUri("Vehnora report", uri)
+                            } else Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, mime) }
+                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            startActivity(if (call.method == "share") Intent.createChooser(intent, "Share vehicle report") else intent)
+                            result.success(true)
+                        } catch (_: ActivityNotFoundException) { result.success(false) }
+                        catch (_: Exception) { result.error("report_unavailable", "Could not open or share the generated report.", null) }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             ATTACHMENTS_CHANNEL
@@ -140,6 +175,7 @@ class MainActivity : FlutterActivity() {
             return
         }
 
+        val copyReport = {
         try {
             val sourceFile = File(request.sourcePath)
             if (!sourceFile.exists()) {
@@ -151,12 +187,14 @@ class MainActivity : FlutterActivity() {
                 }
                 sourceFile.inputStream().use { input -> input.copyTo(output) }
             }
-            request.result.success(
-                mapOf("displayName" to (displayNameFor(uri) ?: request.suggestedName))
-            )
+            val value = mapOf("displayName" to (displayNameFor(uri) ?: request.suggestedName))
+            runOnUiThread { request.result.success(value) }
         } catch (error: Exception) {
-            request.result.error("save_failed", error.message ?: "Could not save file.", null)
+            runOnUiThread { request.result.error("save_failed", error.message ?: "Could not save file.", null) }
         }
+        }
+        if (request.background) Thread { copyReport() }.start() else copyReport()
+
     }
 
     private fun pickAttachment(result: MethodChannel.Result) {
@@ -214,7 +252,8 @@ class MainActivity : FlutterActivity() {
         sourcePath: String?,
         suggestedName: String?,
         mimeType: String?,
-        result: MethodChannel.Result
+        result: MethodChannel.Result,
+        background: Boolean = false
     ) {
         if (pendingSaveRequest != null) {
             result.error("save_in_progress", "Another save dialog is already open.", null)
@@ -231,7 +270,7 @@ class MainActivity : FlutterActivity() {
             putExtra(Intent.EXTRA_TITLE, suggestedName)
         }
         try {
-            pendingSaveRequest = PendingSaveRequest(result, sourcePath, suggestedName)
+            pendingSaveRequest = PendingSaveRequest(result, sourcePath, suggestedName, background)
             startActivityForResult(intent, SAVE_FILE_REQUEST)
         } catch (error: ActivityNotFoundException) {
             pendingSaveRequest = null
@@ -336,6 +375,7 @@ class MainActivity : FlutterActivity() {
     private data class PendingSaveRequest(
         val result: MethodChannel.Result,
         val sourcePath: String,
-        val suggestedName: String
+        val suggestedName: String,
+        val background: Boolean = false
     )
 }

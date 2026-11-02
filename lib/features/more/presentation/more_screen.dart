@@ -78,6 +78,14 @@ class MoreScreen extends StatelessWidget {
               accent: DTAccents.storage,
               onTap: () => AppNavigation.openDataStorage(context),
             ),
+            _MoreTile(
+              key: const Key('moreReportsTile'),
+              icon: Icons.summarize_outlined,
+              title: 'Export & Reports',
+              subtitle: 'Excel data and printable vehicle reports',
+              accent: DTAccents.storage,
+              onTap: () => AppNavigation.openReports(context),
+            ),
             const DTSectionHeader(title: 'Tools'),
             _MoreTile(
               key: const Key('moreFuelCalculatorTile'),
